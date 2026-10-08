@@ -22,6 +22,7 @@
     <div class="brand">
       <span class="brand-star" aria-hidden="true">✦</span>
       <h1>Apps <em>&amp;</em> Daps</h1>
+      <button id="menu-btn" class="menu-btn" aria-label="Backup &amp; settings">⋯</button>
     </div>
     <p class="tagline" id="tagline">your closet, but make it a mood board</p>
   </header>
@@ -42,7 +43,7 @@
       <div id="closet-empty" class="empty" hidden>
         <div class="empty-collage" aria-hidden="true"><span>👗</span><span>👟</span><span>🧥</span></div>
         <h2>Your closet is a blank board</h2>
-        <p>Lay a piece flat, good light, snap it. That's the whole vibe.</p>
+        <p>Lay a piece flat on something plain that contrasts with it (white tee → dark floor), good light, snap it. The background cuts itself out.</p>
         <button class="btn btn-primary" data-action="add">Snap your first piece</button>
       </div>
     </section>
@@ -116,7 +117,12 @@
         <div class="photo-buttons">
           <button type="button" class="btn btn-primary" id="pick-camera">📸 Snap a pic</button>
           <button type="button" class="btn btn-ghost" id="pick-library">🖼 Camera roll</button>
+          <label class="toggle"><input type="checkbox" id="auto-cut" checked> auto cut-out background</label>
         </div>
+      </div>
+      <div id="cut-actions" class="cut-actions" hidden>
+        <button type="button" class="btn btn-ghost btn-sm" id="touch-up">✂ Touch up cutout</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="open-front-btn" hidden>🧥 Cut out the inside</button>
       </div>
 
       <label class="field">
@@ -145,6 +151,51 @@
       </div>
     </form>
   </dialog>
+
+  <!-- CUTOUT EDITOR -->
+  <dialog id="cut-dialog" class="sheet sheet-tall">
+    <div class="detail cut-editor">
+      <div class="cut-head">
+        <h2 class="sheet-title">Cut it <em>out</em></h2>
+        <button class="btn btn-primary btn-sm" id="cut-done">Done</button>
+      </div>
+      <div class="cut-stage"><canvas id="cut-canvas"></canvas></div>
+      <p id="cut-hint" class="cut-hint"></p>
+      <div id="cut-tools" class="chips chips-small cut-toolrow" role="radiogroup">
+        <button type="button" class="chip" data-tool="wand">🪄 Wand</button>
+        <button type="button" class="chip" data-tool="shape">✏️ Shape</button>
+        <button type="button" class="chip" data-tool="erase">🧽 Erase</button>
+        <button type="button" class="chip" data-tool="restore">🖌 Restore</button>
+      </div>
+      <div id="shape-actions" class="cut-actions" hidden>
+        <button type="button" class="btn btn-primary btn-sm" id="shape-cut">✂ Cut shape</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="shape-clear">Clear points</button>
+      </div>
+      <label class="slider"><span id="slider-label">Strength</span><input id="cut-slider" type="range" min="8" max="80" value="30"></label>
+      <div class="cut-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="cut-auto">✨ Auto background</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="cut-front">🧥 Open front</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="cut-undo">↶ Undo</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="cut-reset">Start over</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- SETTINGS / BACKUP -->
+  <dialog id="menu-dialog" class="sheet sheet-small">
+    <form method="dialog">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title">Backup</h2>
+      <p class="sheet-copy">Your closet lives only on this device. Save a backup file now and then, or use one to move your closet to a new phone.</p>
+      <p id="storage-info" class="detail-small"></p>
+      <div class="sheet-actions sheet-actions-col">
+        <button type="button" class="btn btn-primary" id="export-btn">⬇ Save backup file</button>
+        <button type="button" class="btn btn-ghost" id="import-btn">⬆ Restore from backup</button>
+        <button class="btn btn-ghost" value="close">Close</button>
+      </div>
+    </form>
+  </dialog>
+  <input id="import-file" type="file" accept="application/json,.json" hidden>
 
   <!-- ITEM DETAIL -->
   <dialog id="detail-dialog" class="sheet">
@@ -198,6 +249,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="cutout.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

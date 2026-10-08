@@ -553,6 +553,53 @@ dialog::backdrop { background: rgba(42, 28, 23, .45); backdrop-filter: blur(3px)
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ───────────────── cutouts ───────────────── */
+:root { --checker: repeating-conic-gradient(#efe4d6 0 25%, #fffaf2 0 50%) 0 0 / 16px 16px; }
+.pin.is-cut img { padding: 14px 12px 4px; background: radial-gradient(circle at 50% 45%, #fff 0, var(--card) 70%); object-fit: contain; }
+.piece.is-cut img, .look .mini-board .piece.is-cut img { border-radius: 0; }
+.piece.is-cut.is-selected img { outline: none; }
+.piece.is-cut.is-selected { outline: 2.5px dashed var(--terracotta); outline-offset: 4px; border-radius: 6px; }
+.photo-preview.is-cut { background: var(--checker); }
+.photo-preview.is-cut img { object-fit: contain; }
+.photo-preview.is-busy::after {
+  content: "cutting…";
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-family: var(--hand); font-size: 1.3rem;
+  background: rgba(255,250,242,.7);
+}
+.photo-preview { position: relative; }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--ink-soft); }
+.toggle input { accent-color: var(--plum); width: 18px; height: 18px; }
+.btn-sm { padding: 7px 13px; font-size: .85rem; }
+.cut-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 14px; }
+.menu-btn {
+  margin-left: auto;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1.5px solid var(--line); background: var(--card);
+  font-size: 1.3rem; line-height: 1;
+}
+.sheet-copy { color: var(--ink-soft); margin: -4px 0 8px; }
+.sheet-actions-col { flex-direction: column; align-items: stretch; }
+
+dialog.sheet-tall { max-height: 96dvh; }
+.cut-editor { text-align: left; }
+.cut-head { display: flex; align-items: center; justify-content: space-between; }
+.cut-head .sheet-title { margin: 8px 0; }
+.cut-head .sheet-title em { color: var(--terracotta); }
+.cut-stage {
+  display: grid; place-items: center;
+  background: var(--checker);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  padding: 8px;
+}
+#cut-canvas { max-width: 100%; max-height: 50dvh; touch-action: none; cursor: crosshair; }
+.cut-hint { font-family: var(--hand); font-size: 1.2rem; color: var(--plum); margin: 8px 2px 4px; min-height: 1.4em; text-align: center; }
+.cut-toolrow { justify-content: center; }
+.slider { display: flex; align-items: center; gap: 12px; margin: 2px 4px 10px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); }
+.slider input { flex: 1; accent-color: var(--plum); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

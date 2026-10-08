@@ -128,7 +128,7 @@ function renderCloset() {
   const list = filteredItems();
   const grid = $("#closet-grid");
   grid.innerHTML = list.map((i) => `
-    <button class="pin" data-id="${i.id}">
+    <button class="pin${i.cut ? " is-cut" : ""}" data-id="${i.id}">
       <img src="${imgUrl(i)}" alt="${esc(i.name || i.category)}" loading="lazy" style="aspect-ratio:${i.ratio || 0.8}">
       ${i.fav ? '<span class="pin-fav" aria-label="favorite">♥</span>' : ""}
       <div class="pin-label">
@@ -156,7 +156,13 @@ $("#fav-toggle").addEventListener("click", (e) => {
 });
 
 /* ───────────── add / edit item ───────────── */
-const form = { id: null, blob: null, ratio: 0.8, category: "Tops", color: null, queue: [] };
+// original = the plain photo; blob = what's shown (cutout or photo); cut = crop box of the cutout
+const form = { id: null, original: null, blob: null, cut: null, ratio: 0.8, category: "Tops", color: null, queue: [] };
+
+const prefs = {
+  get autoCut() { try { return localStorage.getItem("autoCut") !== "0"; } catch { return true; } },
+  set autoCut(v) { try { localStorage.setItem("autoCut", v ? "1" : "0"); } catch {} },
+};
 
 function loadImage(file) {
   return new Promise((res, rej) => {
@@ -192,11 +198,19 @@ function renderFormPickers() {
     form.color = form.color === b.dataset.v ? null : b.dataset.v;
     renderFormPickers();
   };
+  updateCutActions();
+}
+
+function updateCutActions() {
+  $("#cut-actions").hidden = !form.original;
+  $("#open-front-btn").hidden = form.category !== "Outerwear";
 }
 
 function setPreview(blob) {
   const p = $("#photo-preview");
   if (setPreview.url) URL.revokeObjectURL(setPreview.url);
+  p.classList.toggle("is-cut", !!form.cut);
+  updateCutActions();
   if (!blob) { p.innerHTML = "<span>no pic yet</span>"; return; }
   setPreview.url = URL.createObjectURL(blob);
   p.innerHTML = `<img src="${setPreview.url}" alt="preview">`;
@@ -205,7 +219,9 @@ function setPreview(blob) {
 function openItemForm(item = null) {
   Object.assign(form, {
     id: item?.id ?? null,
+    original: item?.original ?? item?.image ?? null,
     blob: item?.image ?? null,
+    cut: item?.cut ?? null,
     ratio: item?.ratio ?? 0.8,
     category: item?.category ?? (state.filter !== "All" ? state.filter : "Tops"),
     color: item?.color ?? null,
@@ -222,13 +238,37 @@ function openItemForm(item = null) {
 async function takeFile(file) {
   try {
     const { blob, ratio } = await shrink(file);
-    form.blob = blob;
-    form.ratio = ratio;
+    Object.assign(form, { original: blob, blob, cut: null, ratio });
     setPreview(blob);
+    if (prefs.autoCut) await autoCut();
   } catch (err) {
     toast(err.message);
   }
 }
+
+async function autoCut() {
+  const p = $("#photo-preview");
+  p.classList.add("is-busy");
+  await new Promise((r) => setTimeout(r, 30)); // let "cutting…" paint first
+  try {
+    const pix = await Cutout.loadPixels(form.original);
+    const mask = Cutout.removeBackground(pix);
+    const res = mask && await Cutout.render(pix, mask);
+    if (res) {
+      Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
+      setPreview(res.blob);
+    } else {
+      toast("Busy background — tap Touch up to cut it by hand");
+    }
+  } finally {
+    p.classList.remove("is-busy");
+  }
+}
+
+$("#auto-cut").checked = prefs.autoCut;
+$("#auto-cut").onchange = (e) => { prefs.autoCut = e.target.checked; };
+$("#touch-up").onclick = () => openEditor();
+$("#open-front-btn").onclick = () => openEditor("front");
 
 $("#pick-camera").onclick = () => $("#file-camera").click();
 $("#pick-library").onclick = () => $("#file-library").click();
@@ -260,6 +300,8 @@ $("#item-form").addEventListener("submit", async (e) => {
     color: form.color,
     tags: $("#f-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
     image: form.blob,
+    original: form.original,
+    cut: form.cut,
     ratio: form.ratio,
     fav: existing?.fav ?? false,
     createdAt: existing?.createdAt ?? Date.now(),
@@ -271,7 +313,7 @@ $("#item-form").addEventListener("submit", async (e) => {
     return;
   }
   if (existing) {
-    if (existing.image !== item.image) { URL.revokeObjectURL(urls.get(item.id)); urls.delete(item.id); }
+    if (existing.image !== item.image) { URL.revokeObjectURL(urls.get(item.id)); urls.delete(item.id); alphaMaps.delete(item.id); }
     state.items[state.items.indexOf(existing)] = item;
   } else {
     state.items.push(item);
@@ -342,7 +384,7 @@ const board = $("#board");
 function pieceHTML(p, i, selectable) {
   const item = itemById(p.itemId);
   if (!item) return "";
-  return `<div class="piece${selectable && i === state.selected ? " is-selected" : ""}" data-i="${i}"
+  return `<div class="piece${item.cut ? " is-cut" : ""}${selectable && i === state.selected ? " is-selected" : ""}" data-i="${i}"
     style="left:${p.x}%;top:${p.y}%;width:${p.w}%;z-index:${p.z};transform:translate(-50%,-50%) rotate(${p.r}deg)">
     <img src="${imgUrl(item)}" alt="${esc(item.name || item.category)}" draggable="false"></div>`;
 }
@@ -350,6 +392,7 @@ function pieceHTML(p, i, selectable) {
 function renderBoard() {
   board.querySelectorAll(".piece").forEach((n) => n.remove());
   board.insertAdjacentHTML("beforeend", state.board.map((p, i) => pieceHTML(p, i, true)).join(""));
+  state.board.forEach((p) => { const it = itemById(p.itemId); if (it) alphaMap(it); });
   $("#board-hint").hidden = state.board.length > 0;
   $("#piece-tools").hidden = state.selected < 0;
 }
@@ -367,11 +410,82 @@ function updatePiece(i) {
 const topZ = () => Math.max(0, ...state.board.map((p) => p.z)) + 1;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-function addToBoard(itemId, at = {}) {
+const catOf = (p) => itemById(p.itemId)?.category;
+const isBase = (c) => c === "Tops" || c === "Dresses";
+
+function addToBoard(itemId) {
+  const item = itemById(itemId);
   const jitter = () => (Math.random() - 0.5) * 16;
-  state.board.push({ itemId, x: 50 + jitter(), y: 50 + jitter(), w: 42, r: (Math.random() - 0.5) * 8, z: topZ(), ...at });
+  const piece = { itemId, x: 50 + jitter(), y: 50 + jitter(), w: 42, r: (Math.random() - 0.5) * 8, z: topZ() };
+  // Layering: a cut-out jacket goes over the top that's already on the board,
+  // and a top added later slides underneath the jacket.
+  const top = state.board.filter((p) => isBase(catOf(p))).sort((a, b) => b.z - a.z)[0];
+  const jacket = state.board.filter((p) => catOf(p) === "Outerwear" && itemById(p.itemId).cut).sort((a, b) => a.z - b.z)[0];
+  if (item.category === "Outerwear" && item.cut && top) {
+    Object.assign(piece, { x: top.x, y: top.y + 2, w: Math.min(120, top.w * 1.3), r: top.r });
+    toast("Layered over your top 🧥");
+  } else if (isBase(item.category) && jacket) {
+    Object.assign(piece, { x: jacket.x, y: jacket.y - 2, w: jacket.w / 1.3, r: jacket.r, z: jacket.z });
+    jacket.z = topZ() + 1;
+    toast("Tucked under your jacket 🧥");
+  }
+  state.board.push(piece);
   state.selected = state.board.length - 1;
   renderBoard();
+}
+
+// Hit-test against actual pixels, so you can grab a shirt through a jacket's cut-out front.
+const alphaMaps = new Map(); // itemId -> {w, h, a}
+function alphaMap(item) {
+  if (!item.cut) return null;
+  if (alphaMaps.has(item.id)) return alphaMaps.get(item.id);
+  alphaMaps.set(item.id, null);
+  const img = new Image();
+  img.onload = () => {
+    const w = 120, h = Math.max(1, Math.round(120 / (img.naturalWidth / img.naturalHeight)));
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    const d = ctx.getImageData(0, 0, w, h).data;
+    const a = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) a[i] = d[i * 4 + 3];
+    alphaMaps.set(item.id, { w, h, a });
+  };
+  img.src = imgUrl(item);
+  return null;
+}
+
+function pieceAt(clientX, clientY) {
+  const order = state.board.map((p, i) => i).sort((a, b) => state.board[b].z - state.board[a].z);
+  // First look for a piece right under the finger; only then allow a fingertip-sized
+  // margin, so a narrow jacket opening still lets you grab the shirt underneath.
+  for (const fuzz of [0, 8]) {
+    for (const i of order) if (hits(i, clientX, clientY, fuzz)) return i;
+  }
+  return -1;
+}
+
+function hits(i, clientX, clientY, fuzz) {
+  const p = state.board[i];
+  const el = board.querySelector(`.piece[data-i="${i}"]`);
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  const t = (-p.r * Math.PI) / 180;
+  const dx = clientX - (r.left + r.width / 2), dy = clientY - (r.top + r.height / 2);
+  const lx = dx * Math.cos(t) - dy * Math.sin(t) + el.offsetWidth / 2;
+  const ly = dx * Math.sin(t) + dy * Math.cos(t) + el.offsetHeight / 2;
+  if (lx < -fuzz || ly < -fuzz || lx > el.offsetWidth + fuzz || ly > el.offsetHeight + fuzz) return false;
+  const m = alphaMap(itemById(p.itemId));
+  if (!m) return true;
+  const ax = Math.floor((lx / el.offsetWidth) * m.w), ay = Math.floor((ly / el.offsetHeight) * m.h);
+  const rad = Math.round((fuzz / el.offsetWidth) * m.w);
+  for (let y = Math.max(0, ay - rad); y <= Math.min(m.h - 1, ay + rad); y++) {
+    for (let x = Math.max(0, ax - rad); x <= Math.min(m.w - 1, ax + rad); x++) {
+      if (m.a[y * m.w + x] > 40) return true;
+    }
+  }
+  return false;
 }
 
 function renderDrawer() {
@@ -397,18 +511,18 @@ const pointers = new Map();
 let gesture = null;
 
 board.addEventListener("pointerdown", (e) => {
-  const el = e.target.closest(".piece");
-  if (!el) {
-    if (pointers.size === 0) { state.selected = -1; renderBoard(); }
+  // a second finger anywhere keeps pinching the piece the first finger grabbed
+  const i = pointers.size && state.selected >= 0 ? state.selected : pieceAt(e.clientX, e.clientY);
+  if (i < 0) {
+    state.selected = -1;
+    renderBoard();
     return;
   }
-  const i = +el.dataset.i;
   if (state.selected !== i) {
+    // Selecting doesn't change layer order — use ⬆ / ⬇ for that, so layering stays put.
     state.selected = i;
-    state.board[i].z = topZ();
     board.querySelectorAll(".piece").forEach((n) => n.classList.toggle("is-selected", +n.dataset.i === i));
     $("#piece-tools").hidden = false;
-    updatePiece(i);
   }
   board.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -452,7 +566,7 @@ board.addEventListener("pointercancel", endPointer);
 // Desktop: scroll wheel to resize the selected piece.
 board.addEventListener("wheel", (e) => {
   const p = state.board[state.selected];
-  if (!p || !e.target.closest(".piece")) return;
+  if (!p) return;
   e.preventDefault();
   p.w = clamp(p.w * (e.deltaY < 0 ? 1.06 : 0.94), 10, 120);
   updatePiece(state.selected);
@@ -488,16 +602,19 @@ $("#clear-btn").onclick = async () => {
 };
 
 // Shuffle: pull a random fit from the closet and lay it out like a flat-lay.
+// z = layer order: bottoms, then tops, then jackets on top.
 const LAYOUT = {
-  Outerwear: { x: 30, y: 30, w: 46, r: -6 },
-  Tops: { x: 62, y: 26, w: 44, r: 4 },
-  Dresses: { x: 55, y: 40, w: 52, r: 2 },
-  Bottoms: { x: 50, y: 62, w: 42, r: -3 },
-  Shoes: { x: 32, y: 84, w: 34, r: -8 },
-  Bags: { x: 76, y: 70, w: 32, r: 8 },
-  Accessories: { x: 78, y: 12, w: 26, r: 10 },
-  Jewelry: { x: 20, y: 60, w: 22, r: -10 },
+  Bottoms: { x: 50, y: 64, w: 40, r: -2, z: 1 },
+  Tops: { x: 50, y: 29, w: 42, r: 0, z: 2 },
+  Dresses: { x: 50, y: 42, w: 50, r: 0, z: 2 },
+  Outerwear: { x: 50, y: 31, w: 56, r: 0, z: 3 },
+  Shoes: { x: 28, y: 87, w: 30, r: -8, z: 4 },
+  Bags: { x: 81, y: 66, w: 30, r: 8, z: 5 },
+  Accessories: { x: 82, y: 11, w: 24, r: 10, z: 6 },
+  Jewelry: { x: 17, y: 56, w: 20, r: -10, z: 6 },
 };
+// A jacket that hasn't had its inside cut out would hide the top, so it sits off to the side.
+const JACKET_ASIDE = { x: 24, y: 34, w: 42, r: -6, z: 3 };
 function shuffle() {
   const by = (c) => state.items.filter((i) => i.category === c);
   const pick = (c, chance = 1) => {
@@ -516,7 +633,7 @@ function shuffle() {
   if (!picks.length) { toast("Add a few pieces first, then shuffle 🎲"); return; }
   state.board = [];
   state.editingOutfit = null;
-  picks.forEach(([cat, item], n) => state.board.push({ itemId: item.id, ...LAYOUT[cat], z: n + 1 }));
+  picks.forEach(([cat, item]) => state.board.push({ itemId: item.id, ...(cat === "Outerwear" && !item.cut ? JACKET_ASIDE : LAYOUT[cat]) }));
   state.selected = -1;
   renderBoard();
 }
@@ -596,12 +713,225 @@ document.addEventListener("click", (e) => {
 // Tap the dim backdrop to close a sheet.
 document.querySelectorAll("dialog").forEach((d) => {
   d.addEventListener("click", (e) => {
-    if (e.target !== d) return;
+    if (e.target !== d || d.id === "cut-dialog") return;
     const r = d.getBoundingClientRect();
     const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     if (!inside) { if (d.id === "item-dialog") form.queue = []; d.close(); }
   });
 });
+
+/* ───────────── cutout editor ───────────── */
+const ed = { pix: null, mask: null, undo: [], tool: "wand", pts: [], out: null, tol: 30, size: 28, painting: false, last: null };
+const cutCanvas = $("#cut-canvas");
+const hint = (t) => { $("#cut-hint").textContent = t; };
+const HINTS = {
+  wand: "tap anything you want gone — background, a shadow, the inside of a jacket",
+  shape: "tap around the area to cut (like the open front of a jacket), then Cut shape",
+  erase: "paint over bits to remove",
+  restore: "paint to bring bits back",
+};
+
+async function openEditor(mode) {
+  if (!form.original) return;
+  hint("loading…");
+  $("#cut-dialog").showModal();
+  ed.pix = await Cutout.loadPixels(form.original);
+  ed.mask = await Cutout.maskFromCut(ed.pix, form.cut ? form.blob : null, form.cut);
+  ed.undo = [];
+  ed.pts = [];
+  ed.out = new ImageData(ed.pix.W, ed.pix.H);
+  cutCanvas.width = ed.pix.W;
+  cutCanvas.height = ed.pix.H;
+  setTool("wand");
+  draw();
+  if (mode === "front") openFrontNow();
+}
+
+function setTool(t) {
+  ed.tool = t;
+  document.querySelectorAll("#cut-tools .chip").forEach((c) => c.setAttribute("aria-checked", c.dataset.tool === t));
+  const brushy = t === "erase" || t === "restore";
+  $("#slider-label").textContent = brushy ? "Brush" : "Strength";
+  Object.assign($("#cut-slider"), brushy ? { min: 6, max: 90, value: ed.size } : { min: 8, max: 80, value: ed.tol });
+  $("#shape-actions").hidden = t !== "shape" || !ed.pts.length;
+  hint(HINTS[t]);
+}
+$("#cut-tools").onclick = (e) => { const c = e.target.closest(".chip"); if (c) setTool(c.dataset.tool); };
+$("#cut-slider").oninput = (e) => {
+  if (ed.tool === "erase" || ed.tool === "restore") ed.size = +e.target.value; else ed.tol = +e.target.value;
+};
+
+function draw() {
+  const { W, H, data } = ed.pix, o = ed.out.data, m = ed.mask;
+  for (let p = 0; p < W * H; p++) {
+    o[p * 4] = data[p * 4]; o[p * 4 + 1] = data[p * 4 + 1]; o[p * 4 + 2] = data[p * 4 + 2];
+    o[p * 4 + 3] = Math.max(m[p], 38); // removed bits stay faintly visible so you can restore them
+  }
+  const ctx = cutCanvas.getContext("2d");
+  ctx.putImageData(ed.out, 0, 0);
+  if (ed.pts.length) {
+    const k = W / cutCanvas.getBoundingClientRect().width;
+    ctx.strokeStyle = "#c4553a"; ctx.fillStyle = "rgba(196,85,58,.25)"; ctx.lineWidth = 2.5 * k;
+    ctx.setLineDash([6 * k, 4 * k]);
+    ctx.beginPath();
+    ed.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    if (ed.pts.length > 2) { ctx.closePath(); ctx.fill(); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#c4553a";
+    ed.pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 5 * k, 0, 7); ctx.fill(); });
+  }
+}
+let rafId = 0;
+const redraw = () => { rafId ||= requestAnimationFrame(() => { rafId = 0; draw(); }); };
+const pushUndo = () => { ed.undo.push(ed.mask.slice()); if (ed.undo.length > 15) ed.undo.shift(); };
+
+function canvasPoint(e) {
+  const r = cutCanvas.getBoundingClientRect();
+  return [((e.clientX - r.left) * ed.pix.W) / r.width, ((e.clientY - r.top) * ed.pix.H) / r.height, ed.pix.W / r.width];
+}
+function paintTo(x, y, k) {
+  const r = (ed.size * k) / 2;
+  const [lx, ly] = ed.last ?? [x, y];
+  const steps = Math.max(1, Math.ceil(Math.hypot(x - lx, y - ly) / (r / 2)));
+  for (let s = 1; s <= steps; s++) {
+    Cutout.brush(ed.mask, ed.pix.W, ed.pix.H, lx + ((x - lx) * s) / steps, ly + ((y - ly) * s) / steps, r, ed.tool === "restore");
+  }
+  ed.last = [x, y];
+  redraw();
+}
+
+cutCanvas.addEventListener("pointerdown", (e) => {
+  if (!ed.pix) return;
+  const [x, y, k] = canvasPoint(e);
+  if (ed.tool === "wand") {
+    pushUndo();
+    const n = Cutout.wand(ed.pix, ed.mask, x, y, ed.tol);
+    if (!n) { ed.undo.pop(); hint("that spot's already cut"); }
+    else hint("snip ✂ — tap more, or turn Strength up if it missed some");
+    redraw();
+  } else if (ed.tool === "shape") {
+    ed.pts.push([x, y]);
+    $("#shape-actions").hidden = false;
+    redraw();
+  } else {
+    pushUndo();
+    ed.painting = true;
+    ed.last = null;
+    cutCanvas.setPointerCapture(e.pointerId);
+    paintTo(x, y, k);
+  }
+});
+cutCanvas.addEventListener("pointermove", (e) => {
+  if (!ed.painting) return;
+  const [x, y, k] = canvasPoint(e);
+  paintTo(x, y, k);
+});
+const stopPaint = () => { ed.painting = false; ed.last = null; };
+cutCanvas.addEventListener("pointerup", stopPaint);
+cutCanvas.addEventListener("pointercancel", stopPaint);
+
+$("#shape-cut").onclick = () => {
+  if (ed.pts.length < 3) { hint("tap at least 3 points"); return; }
+  pushUndo();
+  Cutout.cutPolygon(ed.mask, ed.pix.W, ed.pix.H, ed.pts);
+  ed.pts = [];
+  $("#shape-actions").hidden = true;
+  hint("cut ✂");
+  redraw();
+};
+$("#shape-clear").onclick = () => { ed.pts = []; $("#shape-actions").hidden = true; redraw(); };
+
+$("#cut-auto").onclick = () => {
+  pushUndo();
+  const m = Cutout.removeBackground(ed.pix, ed.tol);
+  if (m) { ed.mask.set(m); hint("background gone ✨ — not quite? nudge Strength and try again"); }
+  else { ed.undo.pop(); hint("couldn't find a plain background — use the wand or shape tool"); }
+  redraw();
+};
+function openFrontNow() {
+  pushUndo();
+  const r = Cutout.openFront(ed.pix, ed.mask, ed.tol);
+  if (r.ok) hint("opened up the front 🧥 — it'll layer over tops now");
+  else { ed.undo.pop(); setTool("shape"); hint(r.why); }
+  redraw();
+}
+$("#cut-front").onclick = openFrontNow;
+$("#cut-undo").onclick = () => { const m = ed.undo.pop(); if (m) { ed.mask.set(m); redraw(); } else hint("nothing to undo"); };
+$("#cut-reset").onclick = () => { pushUndo(); ed.mask.fill(255); ed.pts = []; redraw(); hint("back to the original photo"); };
+
+$("#cut-done").onclick = async () => {
+  const res = await Cutout.render(ed.pix, ed.mask);
+  if (res) Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
+  else Object.assign(form, { blob: form.original, cut: null, ratio: ed.pix.W / ed.pix.H });
+  setPreview(form.blob);
+  $("#cut-dialog").close();
+};
+
+/* ───────────── backup ───────────── */
+const toDataURL = (blob) => new Promise((res, rej) => {
+  const fr = new FileReader();
+  fr.onload = () => res(fr.result);
+  fr.onerror = () => rej(fr.error);
+  fr.readAsDataURL(blob);
+});
+const fromDataURL = async (u) => (await fetch(u)).blob();
+
+$("#menu-btn").onclick = async () => {
+  $("#storage-info").textContent = `${state.items.length} pieces · ${state.outfits.length} looks`;
+  $("#menu-dialog").showModal();
+  const est = await navigator.storage?.estimate?.().catch(() => null);
+  if (est?.usage) $("#storage-info").textContent += ` · ${(est.usage / 1048576).toFixed(1)} MB used`;
+};
+
+$("#export-btn").onclick = async () => {
+  toast("Packing your closet…");
+  const items = await Promise.all(state.items.map(async (i) => ({
+    ...i,
+    image: await toDataURL(i.image),
+    original: i.original && i.original !== i.image ? await toDataURL(i.original) : null,
+  })));
+  const data = { app: "apps-and-daps", version: 1, exportedAt: new Date().toISOString(), items, outfits: state.outfits };
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `apps-and-daps-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  toast("Backup saved 💾");
+};
+
+$("#import-btn").onclick = () => $("#import-file").click();
+$("#import-file").onchange = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (data.app !== "apps-and-daps") throw new Error("not a backup");
+    for (const raw of data.items || []) {
+      const image = await fromDataURL(raw.image);
+      const item = { ...raw, image, original: raw.original ? await fromDataURL(raw.original) : image };
+      await idb.put("items", item);
+      urls.delete(item.id);
+      alphaMaps.delete(item.id);
+      state.items = state.items.filter((i) => i.id !== item.id).concat(item);
+    }
+    for (const o of data.outfits || []) {
+      await idb.put("outfits", o);
+      state.outfits = state.outfits.filter((x) => x.id !== o.id).concat(o);
+    }
+    $("#menu-dialog").close();
+    renderCloset();
+    renderDrawer();
+    renderOutfits();
+    toast(`Restored ${data.items?.length ?? 0} pieces & ${data.outfits?.length ?? 0} looks ✨`);
+  } catch {
+    toast("That file doesn't look like an Apps & Daps backup");
+  }
+};
 
 $("#tagline").textContent = TAGLINES[Math.floor(Math.random() * TAGLINES.length)];
 
