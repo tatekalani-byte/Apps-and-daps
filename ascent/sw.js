@@ -1,6 +1,6 @@
-// Offline cache for the app shell. Bump VERSION when shipping changes.
-const VERSION = "v9";
-const SHELL = ["./", "index.html", "styles.css", "cutout.js", "samples.js", "outfit-photo.js", "app.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png"];
+// Offline cache for Ascent. Bump VERSION when shipping changes.
+const VERSION = "ascent-v1";
+const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -8,7 +8,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith("ascent-") && k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -16,7 +16,6 @@ self.addEventListener("activate", (e) => {
 // Network first (so updates show up), fall back to cache when offline.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
-  if (new URL(e.request.url).pathname.includes("/ascent/")) return; // Ascent has its own service worker
   e.respondWith(
     fetch(e.request)
       .then((res) => {
