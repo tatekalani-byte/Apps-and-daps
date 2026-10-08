@@ -49,22 +49,42 @@ const Samples = (() => {
     return s;
   })();
 
-  const ITEMS = [
-    { name: "leopard faux-fur coat", size: 38, category: "Outerwear", color: "tan", tags: ["vintage", "statement", "winter"], w: 220, h: 310,
-      svg: svg(220, 310, P.leopard, mirror(220, fab(coatHalf(300), "#c98a3d", "leo", "#6b4320") +
-        `<path d="M92 18 L80 62 L102 128 L96 70 Z" fill="#a8702f" stroke="#6b4320" stroke-width="1.4"/>`)) },
-    { name: "camel belted trench", size: 40, category: "Outerwear", color: "tan", tags: ["classic", "spring", "work"], w: 220, h: 300,
-      svg: svg(220, 300, "", mirror(220, fab(coatHalf(290), "#c8a06a", "", "#86663a") +
+  // Jacket bodies (open front), and the linings that show through when browsing.
+  const LEO_BODY = mirror(220, fab(coatHalf(300), "#c98a3d", "leo", "#6b4320") +
+        `<path d="M92 18 L80 62 L102 128 L96 70 Z" fill="#a8702f" stroke="#6b4320" stroke-width="1.4"/>`);
+  const TRENCH_BODY = mirror(220, fab(coatHalf(290), "#c8a06a", "", "#86663a") +
         `<path d="M92 18 L78 66 L102 128 L96 70Z" fill="#b48b55" stroke="#86663a" stroke-width="1.4"/>
          <rect x="50" y="150" width="54" height="13" fill="#a98450" stroke="#86663a" stroke-width="1.2"/>
          <circle cx="90" cy="96" r="3.2" fill="#4a3720"/><circle cx="92" cy="122" r="3.2" fill="#4a3720"/>
          <circle cx="94" cy="186" r="3.2" fill="#4a3720"/><circle cx="94" cy="214" r="3.2" fill="#4a3720"/>
-         <path d="M26 60 L40 64" stroke="#86663a" stroke-width="2"/>`)) },
-    { name: "cropped vintage denim jacket", size: 21, category: "Outerwear", color: "denim", tags: ["casual", "90s", "layering"], w: 220, h: 200,
-      svg: svg(220, 200, P.denim, mirror(220, fab("M92 16 L44 30 Q30 36 26 56 L10 186 L36 188 L52 96 L50 178 L104 178 L104 112 L80 58 Z", "#5a7593", "dnm", "#33475e") +
+         <path d="M26 60 L40 64" stroke="#86663a" stroke-width="2"/>`);
+  const DENIM_BODY = mirror(220, fab("M92 16 L44 30 Q30 36 26 56 L10 186 L36 188 L52 96 L50 178 L104 178 L104 112 L80 58 Z", "#5a7593", "dnm", "#33475e") +
         `<path d="M92 16 L76 58 L100 100 L94 60Z" fill="#4c6680" stroke="#33475e" stroke-width="1.2"/>
          <rect x="58" y="92" width="30" height="24" rx="3" fill="none" stroke="#d69a4a" stroke-width="1.4" stroke-dasharray="3 2"/>
-         <path d="M52 140 H104" stroke="#d69a4a" stroke-width="1.4" stroke-dasharray="3 2"/><circle cx="96" cy="128" r="2.6" fill="#c9a646"/><circle cx="96" cy="158" r="2.6" fill="#c9a646"/>`)) },
+         <path d="M52 140 H104" stroke="#d69a4a" stroke-width="1.4" stroke-dasharray="3 2"/><circle cx="96" cy="128" r="2.6" fill="#c9a646"/><circle cx="96" cy="158" r="2.6" fill="#c9a646"/>`);
+  const LINE = {
+    satin: `<linearGradient id="lsat" x1="0" x2="1"><stop offset="0" stop-color="#3e0f1c"/><stop offset=".45" stop-color="#7a2238"/><stop offset=".55" stop-color="#9a3550"/><stop offset="1" stop-color="#3e0f1c"/></linearGradient>`,
+    check: `<pattern id="lchk" width="24" height="24" patternUnits="userSpaceOnUse"><rect width="24" height="24" fill="#d8c29c"/>
+      <rect x="0" y="9" width="24" height="3" fill="#2b2420"/><rect x="9" y="0" width="3" height="24" fill="#2b2420"/>
+      <rect x="0" y="18" width="24" height="1" fill="#b3302d"/><rect x="18" y="0" width="1" height="24" fill="#b3302d"/><rect x="0" y="2" width="24" height="1" fill="#f3eadb"/></pattern>`,
+    sherpa: `<pattern id="lshp" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#ece1cc"/>
+      <circle cx="2" cy="2" r="1.6" fill="#f7efe0"/><circle cx="6" cy="6" r="1.6" fill="#d9ccb3"/></pattern>`,
+  };
+  const tagLabel = (x, y) => `<rect x="${x}" y="${y}" width="12" height="7" rx="1" fill="#f3eadb" stroke="#00000033" stroke-width=".6"/>`;
+  const LEO = `<path d="M92 18 L128 18 L140 62 L118 128 L116 300 L104 300 L102 128 L80 62 Z" fill="url(#lsat)" stroke="#2a0a13" stroke-width="1.2"/>
+    <path d="M92 18 Q110 30 128 18 L130 28 Q110 40 90 28 Z" fill="#a8702f"/>${tagLabel(104, 34)}`;
+  const TRENCH = `<path d="M92 18 L128 18 L142 66 L118 128 L116 290 L104 290 L102 128 L78 66 Z" fill="url(#lchk)" stroke="#86663a" stroke-width="1.2"/>
+    <path d="M92 18 Q110 30 128 18 L130 28 Q110 40 90 28 Z" fill="#b48b55"/>${tagLabel(104, 34)}`;
+  const DENIM = `<path d="M92 16 L128 16 L140 58 L116 112 L116 178 L104 178 L104 112 L80 58 Z" fill="url(#lshp)" stroke="#b9ab90" stroke-width="1"/>
+    <path d="M92 16 Q110 28 128 16 L130 26 Q110 38 90 26 Z" fill="#ece1cc" stroke="#b9ab90" stroke-width=".8"/>${tagLabel(104, 30)}`;
+
+  const ITEMS = [
+    { name: "leopard faux-fur coat", size: 38, category: "Outerwear", color: "tan", tags: ["vintage", "statement", "winter"], w: 220, h: 310,
+      svg: svg(220, 310, P.leopard + LINE.satin, LEO + LEO_BODY), layerSvg: svg(220, 310, P.leopard, LEO_BODY) },
+    { name: "camel belted trench", size: 40, category: "Outerwear", color: "tan", tags: ["classic", "spring", "work"], w: 220, h: 300,
+      svg: svg(220, 300, LINE.check, TRENCH + TRENCH_BODY), layerSvg: svg(220, 300, "", TRENCH_BODY) },
+    { name: "cropped vintage denim jacket", size: 21, category: "Outerwear", color: "denim", tags: ["casual", "90s", "layering"], w: 220, h: 200,
+      svg: svg(220, 200, P.denim + LINE.sherpa, DENIM + DENIM_BODY), layerSvg: svg(220, 200, P.denim, DENIM_BODY) },
 
     { name: "cream silk pussy-bow blouse", size: 25, category: "Tops", color: "cream", tags: ["silk", "work", "date night"], w: 220, h: 230,
       svg: svg(220, 230, "", fab(longSleeve, "#f1e6cf", "", "#b9a786") +
@@ -169,8 +189,10 @@ const Samples = (() => {
     const now = Date.now();
     const items = await Promise.all(ITEMS.map(async (s, n) => {
       const image = await rasterize(s.svg, s.w, s.h);
-      return { id: uid(), name: s.name, size: s.size, category: s.category, color: s.color, tags: s.tags, image, original: image,
-        cut: { x: 0, y: 0, w: s.w * 2, h: s.h * 2 }, ratio: s.w / s.h, fav: n % 5 === 0, sample: true, createdAt: now - n * 1000 };
+      const cut = { x: 0, y: 0, w: s.w * 2, h: s.h * 2 };
+      const layer = s.layerSvg ? { blob: await rasterize(s.layerSvg, s.w, s.h), cut, ratio: s.w / s.h } : null;
+      return { id: uid(), name: s.name, size: s.size, category: s.category, color: s.color, tags: s.tags, image, original: image, layer,
+        cut, ratio: s.w / s.h, fav: n % 5 === 0, sample: true, createdAt: now - n * 1000 };
     }));
     const byName = Object.fromEntries(items.map((i) => [i.name, i.id]));
     const outfits = LOOKS.map((l, n) => ({ id: uid(), name: l.name, vibe: l.vibe, sample: true, createdAt: now - n * 1000,

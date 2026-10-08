@@ -10,13 +10,6 @@ const COLORS = {
   multi: "conic-gradient(#b5302a, #e8c33f, #5f7a45, #4f7fbf, #6c3f87, #b5302a)",
 };
 const VIBES = ["Everyday", "Date night", "Brunch", "Work", "Going out", "Cozy", "Vacation", "Special occasion"];
-const TAGLINES = [
-  "dressed for the late set",
-  "city of stars, closet of fits",
-  "your closet after midnight",
-  "see you, style cowboy",
-  "one more song, one more outfit",
-];
 
 /* ───────────── storage ───────────── */
 const idb = (() => {
@@ -137,20 +130,16 @@ function renderCloset() {
   const list = filteredItems();
   const grid = $("#closet-grid");
   grid.innerHTML = list.map((i) => `
-    <button class="pin${i.cut ? " is-cut" : ""}" data-id="${i.id}">
-      <img src="${imgUrl(i)}" alt="${esc(i.name || i.category)}" loading="lazy" style="aspect-ratio:${i.ratio || 0.8}">
-      ${i.fav ? '<span class="pin-fav" aria-label="favorite">♥</span>' : ""}
-      <div class="pin-label">
-        <p class="pin-name">${esc(i.name || "untitled piece")}</p>
-        <p class="pin-sub"><span class="dot" style="${dotStyle(i.color)}"></span>${esc(i.category)}</p>
-      </div>
+    <button class="pin${i.cut ? " is-cut" : ""}" data-id="${i.id}" aria-label="${esc(i.name || i.category)}">
+      <img src="${imgUrl(i)}" alt="" loading="lazy">
+      ${i.fav ? '<span class="pin-fav" aria-hidden="true"></span>' : ""}
     </button>`).join("");
 
   const empty = state.items.length === 0;
   $("#closet-empty").hidden = !empty;
   $("#closet-count").textContent = empty ? "" :
-    list.length === state.items.length ? `${state.items.length} piece${state.items.length === 1 ? "" : "s"} in the closet` :
-    `${list.length} of ${state.items.length} pieces`;
+    list.length === state.items.length ? `${state.items.length} piece${state.items.length === 1 ? "" : "s"}` :
+    `${list.length} of ${state.items.length}`;
 }
 
 $("#closet-grid").addEventListener("click", (e) => {
@@ -166,7 +155,8 @@ $("#fav-toggle").addEventListener("click", (e) => {
 
 /* ───────────── add / edit item ───────────── */
 // original = the plain photo; blob = what's shown (cutout or photo); cut = crop box of the cutout
-const form = { id: null, original: null, blob: null, cut: null, ratio: 0.8, category: "Tops", color: null, queue: [] };
+// layer = jacket version with the inside removed, used only when layering over a top
+const form = { id: null, original: null, blob: null, cut: null, layer: null, ratio: 0.8, category: "Tops", color: null, queue: [] };
 
 const prefs = {
   get autoCut() { try { return localStorage.getItem("autoCut") !== "0"; } catch { return true; } },
@@ -236,8 +226,14 @@ $("#f-unit").onclick = (e) => {
 };
 
 function updateCutActions() {
+  const jacket = form.category === "Outerwear";
   $("#cut-actions").hidden = !form.original;
-  $("#open-front-btn").hidden = form.category !== "Outerwear";
+  $("#open-front-btn").hidden = !jacket;
+  $("#open-front-btn").textContent = form.layer ? "Edit the inside" : "Mark the inside for layering";
+  $("#layer-note").hidden = !jacket || !form.original;
+  $("#layer-note").textContent = form.layer
+    ? "Inside marked. The closet shows the full jacket; the inside is hidden only when it's layered over a top."
+    : "Draw around the lining that shows through the open front, so a top shows through when you layer this.";
 }
 
 function setPreview(blob) {
@@ -245,7 +241,7 @@ function setPreview(blob) {
   if (setPreview.url) URL.revokeObjectURL(setPreview.url);
   p.classList.toggle("is-cut", !!form.cut);
   updateCutActions();
-  if (!blob) { p.innerHTML = "<span>no pic yet</span>"; return; }
+  if (!blob) { p.innerHTML = "<span>No photo</span>"; return; }
   setPreview.url = URL.createObjectURL(blob);
   p.innerHTML = `<img src="${setPreview.url}" alt="preview">`;
 }
@@ -256,15 +252,16 @@ function openItemForm(item = null) {
     original: item?.original ?? item?.image ?? null,
     blob: item?.image ?? null,
     cut: item?.cut ?? null,
+    layer: item?.layer ?? null,
     ratio: item?.ratio ?? 0.8,
     category: item?.category ?? (state.filter !== "All" ? state.filter : "Tops"),
     color: item?.color ?? null,
   });
-  $("#item-dialog-title").textContent = item ? "Edit piece" : form.queue.length ? `New piece · ${form.queue.length} more after this` : "New piece";
+  $("#item-dialog-title").textContent = item ? "Edit piece" : form.queue.length ? `New piece (${form.queue.length} more)` : "New piece";
   $("#f-name").value = item?.name ?? "";
   $("#f-tags").value = (item?.tags ?? []).join(", ");
   $("#f-size").value = item?.size ? fromInches(item.size) : "";
-  $("#item-save").textContent = item ? "Save changes" : "Hang it up";
+  $("#item-save").textContent = item ? "Save changes" : "Add to closet";
   setPreview(form.blob);
   renderFormPickers();
   if (!$("#item-dialog").open) $("#item-dialog").showModal();
@@ -273,7 +270,7 @@ function openItemForm(item = null) {
 async function takeFile(file) {
   try {
     const { blob, ratio } = await shrink(file);
-    Object.assign(form, { original: blob, blob, cut: null, ratio });
+    Object.assign(form, { original: blob, blob, cut: null, layer: null, ratio });
     setPreview(blob);
     if (prefs.autoCut) await autoCut();
   } catch (err) {
@@ -293,7 +290,7 @@ async function autoCut() {
       Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
       setPreview(res.blob);
     } else {
-      toast("Busy background — tap Touch up to cut it by hand");
+      toast("Couldn't find a plain background. Use Touch up to cut it by hand.");
     }
   } finally {
     p.classList.remove("is-busy");
@@ -303,7 +300,7 @@ async function autoCut() {
 $("#auto-cut").checked = prefs.autoCut;
 $("#auto-cut").onchange = (e) => { prefs.autoCut = e.target.checked; };
 $("#touch-up").onclick = () => openEditor();
-$("#open-front-btn").onclick = () => openEditor("front");
+$("#open-front-btn").onclick = () => openEditor("inside");
 
 $("#pick-camera").onclick = () => $("#file-camera").click();
 $("#pick-library").onclick = () => $("#file-library").click();
@@ -319,14 +316,14 @@ $("#file-library").onchange = async (e) => {
   // Picked a bunch? Tag them one after another.
   if (rest.length && !form.id) form.queue.push(...rest);
   await takeFile(first);
-  if (rest.length && !form.id) $("#item-dialog-title").textContent = `New piece · ${form.queue.length} more after this`;
+  if (rest.length && !form.id) $("#item-dialog-title").textContent = `New piece (${form.queue.length} more)`;
 };
 
 $("#item-cancel").onclick = () => { form.queue = []; $("#item-dialog").close(); };
 
 $("#item-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!form.blob) { toast("Snap or pick a photo first 📸"); return; }
+  if (!form.blob) { toast("Add a photo first"); return; }
   const existing = form.id && itemById(form.id);
   const item = {
     id: form.id ?? uid(),
@@ -338,6 +335,7 @@ $("#item-form").addEventListener("submit", async (e) => {
     image: form.blob,
     original: form.original,
     cut: form.cut,
+    layer: form.category === "Outerwear" ? form.layer : null,
     ratio: form.ratio,
     fav: existing?.fav ?? false,
     createdAt: existing?.createdAt ?? Date.now(),
@@ -352,7 +350,7 @@ $("#item-form").addEventListener("submit", async (e) => {
   renderCloset();
   renderDrawer();
   renderBoard();
-  toast(existing ? "Updated ✨" : "Hung up in the closet ✨");
+  toast(existing ? "Saved" : "Added to closet");
 
   if (form.queue.length) {
     const next = form.queue.shift();
@@ -371,13 +369,13 @@ function openDetail(id) {
   detailId = id;
   $("#d-img").src = imgUrl(i);
   $("#d-img").alt = i.name || i.category;
-  $("#d-caption").textContent = i.name || "untitled piece";
+  $("#d-caption").textContent = i.name || "Untitled";
   const sz = i.size ? ` · ${fromInches(i.size)} ${unit.v}` : "";
   $("#d-meta").innerHTML = `<span class="dot" style="${dotStyle(i.color)}"></span>${esc(i.category)}${i.color ? " · " + esc(i.color) : ""}${sz}`;
   $("#d-tags").innerHTML = (i.tags || []).map((t) => `<span class="tag">#${esc(t)}</span>`).join("");
   const n = state.outfits.filter((o) => o.pieces.some((p) => p.itemId === id)).length;
-  $("#d-used").textContent = n ? `styled in ${n} look${n === 1 ? "" : "s"}` : "not styled yet — give it a moment";
-  $("#d-fav").textContent = i.fav ? "♥ Faved" : "♡ Fave";
+  $("#d-used").textContent = (n ? `In ${n} look${n === 1 ? "" : "s"}` : "Not in any looks yet") + (i.layer ? " · Layering cutout" : "");
+  $("#d-fav").textContent = i.fav ? "Unfavorite" : "Favorite";
   $("#detail-dialog").showModal();
 }
 
@@ -396,14 +394,14 @@ $("#d-edit").onclick = () => {
 $("#d-delete").onclick = async () => {
   const id = detailId;
   $("#detail-dialog").close();
-  if (!(await confirmBox("Toss this piece from your closet?"))) return;
+  if (!(await confirmBox("Delete this piece from your closet?"))) return;
   await idb.del("items", id);
   state.items = state.items.filter((i) => i.id !== id);
   state.board = state.board.filter((p) => p.itemId !== id);
   URL.revokeObjectURL(urls.get(id));
   urls.delete(id);
   renderCloset();
-  toast("Gone. Closet cleanse 🧹");
+  toast("Deleted");
 };
 $("#d-style").onclick = () => {
   $("#detail-dialog").close();
@@ -453,11 +451,30 @@ function dims(item) {
   return r >= 1 ? { w: long, h: long / r } : { w: long * r, h: long };
 }
 
+// A jacket has two looks: the full one (lining and back showing) for browsing, and a
+// layering version with the inside removed. The layering version is used only when
+// the jacket is worn over a top or dress.
+const layerViews = new Map(); // item id -> view object
+function viewFor(itemId, pieces) {
+  const item = itemById(itemId);
+  if (!item?.layer || item.category !== "Outerwear") return item;
+  if (!pieces.some((q) => ["Tops", "Dresses"].includes(itemById(q.itemId)?.category))) return item;
+  let v = layerViews.get(item.id);
+  if (!v || v.image !== item.layer.blob || v.size !== item.size) {
+    v = { ...item, id: item.id + ":layer", image: item.layer.blob, cut: item.layer.cut, ratio: item.layer.ratio };
+    URL.revokeObjectURL(urls.get(v.id));
+    urls.delete(v.id);
+    alphaMaps.delete(v.id);
+    layerViews.set(item.id, v);
+  }
+  return v;
+}
+
 // Board pieces are {itemId, dx, dy, tuck}; layout turns them into {x, y, w, r, z} in board %.
 function layout(pieces) {
   const used = {};
   return pieces.map((p) => {
-    const item = itemById(p.itemId);
+    const item = viewFor(p.itemId, pieces);
     if (!item) return null;
     const { w, h } = dims(item);
     let cx = FIG.w / 2, top;
@@ -476,6 +493,7 @@ function layout(pieces) {
     }
     return {
       itemId: p.itemId,
+      view: item,
       x: ((cx + (p.dx || 0)) / FIG.w) * 100,
       y: ((top + h / 2 + (p.dy || 0)) / FIG.h) * 100,
       w: (w / FIG.w) * 100,
@@ -486,7 +504,7 @@ function layout(pieces) {
 }
 
 function pieceHTML(p, i, selectable) {
-  const item = p && itemById(p.itemId);
+  const item = p && (p.view ?? itemById(p.itemId));
   if (!item) return "";
   return `<div class="piece${item.cut ? " is-cut" : ""}${selectable && i === state.selected ? " is-selected" : ""}" data-i="${i}"
     style="left:${p.x}%;top:${p.y}%;width:${p.w}%;z-index:${p.z};transform:translate(-50%,-50%)">
@@ -575,11 +593,11 @@ function clippedUrl(under, pu, over, po) {
 
 // Swap clipped images in for every top/dress layered under a jacket.
 function applyClips(container, list) {
-  const jackets = list.filter((p) => p && itemById(p.itemId)?.category === "Outerwear").sort((a, b) => b.z - a.z);
+  const jackets = list.filter((p) => p?.view?.category === "Outerwear").sort((a, b) => b.z - a.z);
   if (!jackets.length) return;
-  const jp = jackets[0], jacket = itemById(jp.itemId);
+  const jp = jackets[0], jacket = jp.view;
   list.forEach((p, i) => {
-    const item = p && itemById(p.itemId);
+    const item = p?.view;
     if (!item || !["Tops", "Dresses"].includes(item.category) || p.z > jp.z) return;
     const el = container.querySelector(`.piece[data-i="${i}"] img`);
     if (!el) return;
@@ -601,7 +619,7 @@ function renderBoard() {
   board.querySelectorAll(".piece").forEach((n) => n.remove());
   board.insertAdjacentHTML("beforeend", placed.map((p, i) => pieceHTML(p, i, true)).join(""));
   applyClips(board, placed);
-  state.board.forEach((p) => alphaMap(itemById(p.itemId)));
+  placed.forEach((p) => alphaMap(p.view));
   $("#board-hint").hidden = state.board.length > 0;
   renderTools();
   markDrawer();
@@ -643,7 +661,7 @@ function wear(itemId, { quiet = false } = {}) {
   renderBoard();
   if (quiet) return;
   if (c === "Outerwear" && !item.cut && state.board.some((p) => ["Tops", "Dresses"].includes(catOf(p)))) {
-    toast("Cut out this jacket's inside so your top shows through");
+    toast("Mark this jacket's inside (Edit) so your top shows through");
   } else if (out.length) {
     const names = out.map((p) => itemById(p.itemId)?.name || catOf(p).toLowerCase());
     toast(`Swapped out ${names.join(" & ")}`);
@@ -709,7 +727,7 @@ function hits(i, clientX, clientY, fuzz) {
   const r = el.getBoundingClientRect();
   const lx = clientX - r.left, ly = clientY - r.top;
   if (lx < -fuzz || ly < -fuzz || lx > r.width + fuzz || ly > r.height + fuzz) return false;
-  const m = alphaMap(itemById(state.board[i].itemId));
+  const m = alphaMap(placed[i].view);
   if (!m) return true;
   const ax = Math.floor((lx / r.width) * m.w), ay = Math.floor((ly / r.height) * m.h);
   const rad = Math.round((fuzz / r.width) * m.w);
@@ -731,7 +749,7 @@ function renderDrawer() {
     .sort((a, b) => (b.fav - a.fav) || (b.createdAt - a.createdAt));
   $("#drawer-strip").innerHTML = list.length
     ? list.map((i) => `<button class="strip-item" data-id="${i.id}" title="${esc(i.name || i.category)}"><img src="${imgUrl(i)}" alt="${esc(i.name || i.category)}" loading="lazy"></button>`).join("")
-    : `<p class="strip-empty">add some pieces to your closet first ✿</p>`;
+    : `<p class="strip-empty">Add pieces to your closet first.</p>`;
   markDrawer();
 }
 // Show which pieces are on right now.
@@ -799,7 +817,7 @@ function shuffle() {
     jackets.length && Math.random() < 0.5 ? jackets[Math.floor(Math.random() * jackets.length)] : null,
     pick("Shoes"), pick("Bags", 0.7), pick("Accessories", 0.5), pick("Jewelry", 0.6),
   ].filter(Boolean);
-  if (!picks.length) { toast("Add a few pieces first, then shuffle 🎲"); return; }
+  if (!picks.length) { toast("Add a few pieces first"); return; }
   state.board = picks.map((i) => ({ itemId: i.id, dx: 0, dy: 0, tuck: false }));
   state.editingOutfit = null;
   state.selected = -1;
@@ -810,7 +828,7 @@ $("#shuffle-btn").onclick = shuffle;
 /* ───────────── save + lookbook ───────────── */
 let saveVibe = VIBES[0];
 $("#save-outfit-btn").onclick = () => {
-  if (!state.board.length) { toast("Pin a few pieces to the board first"); return; }
+  if (!state.board.length) { toast("Put on a few pieces first"); return; }
   const o = state.editingOutfit && state.outfits.find((x) => x.id === state.editingOutfit);
   $("#o-name").value = o?.name ?? "";
   saveVibe = o?.vibe ?? VIBES[0];
@@ -834,7 +852,7 @@ $("#save-form").addEventListener("submit", async (e) => {
   else state.outfits.push(outfit);
   state.editingOutfit = outfit.id;
   $("#save-dialog").close();
-  toast("Pinned to the lookbook 📌");
+  toast("Saved to Looks");
 });
 
 function renderOutfits() {
@@ -843,7 +861,7 @@ function renderOutfits() {
   const laid = new Map(list.map((o) => [o.id, layout(o.pieces)]));
   $("#outfit-grid").innerHTML = list.map((o) => `
     <div class="look" data-id="${o.id}" role="button" tabindex="0">
-      <button class="look-del" data-del="${o.id}" aria-label="Delete look">✕</button>
+      <button class="look-del" data-del="${o.id}" aria-label="Delete look">×</button>
       <div class="mini-board">${laid.get(o.id).map((p, i) => pieceHTML(p, i, false)).join("")}</div>
       <p class="look-name">${esc(o.name)}</p>
       <span class="look-vibe">${esc(o.vibe)}</span>
@@ -854,7 +872,7 @@ function renderOutfits() {
 $("#outfit-grid").addEventListener("click", async (e) => {
   const del = e.target.closest("[data-del]");
   if (del) {
-    if (!(await confirmBox("Delete this look? (your clothes stay put)"))) return;
+    if (!(await confirmBox("Delete this look? Your pieces stay in the closet."))) return;
     await idb.del("outfits", del.dataset.del);
     state.outfits = state.outfits.filter((o) => o.id !== del.dataset.del);
     if (state.editingOutfit === del.dataset.del) state.editingOutfit = null;
@@ -891,66 +909,98 @@ document.querySelectorAll("dialog").forEach((d) => {
   });
 });
 
-/* ───────────── cutout editor ───────────── */
-const ed = { pix: null, mask: null, undo: [], tool: "wand", pts: [], out: null, tol: 30, size: 28, painting: false, last: null };
+/* ───────────── cutout editor ─────────────
+   Two modes on the same photo:
+   - "bg": the main cutout (background removed), shown everywhere.
+   - "inside": for jackets, what to hide when layering over a top. It starts from the
+     main cutout and can only remove more; the main cutout is never changed by it. */
+const ed = { mode: "bg", pix: null, mask: null, base: null, undo: [], tool: "lasso", pts: [], out: null, tol: 30, size: 28, painting: false, drawing: false, last: null };
 const cutCanvas = $("#cut-canvas");
 const hint = (t) => { $("#cut-hint").textContent = t; };
 const HINTS = {
-  wand: "tap anything you want gone — background, a shadow, the inside of a jacket",
-  shape: "tap around the area to cut (like the open front of a jacket), then Cut shape",
-  erase: "paint over bits to remove",
-  restore: "paint to bring bits back",
+  bg: {
+    lasso: "Draw around anything you want removed.",
+    wand: "Tap an area of one color to remove it.",
+    erase: "Paint over anything you want removed.",
+    restore: "Paint to bring parts back.",
+  },
+  inside: {
+    lasso: "Draw around the lining or back that shows through the open front. It's hidden only when this is layered over a top.",
+    wand: "Tap the lining to remove it in one go.",
+    erase: "Paint over the inside to remove it.",
+    restore: "Paint to bring parts back.",
+  },
 };
 
-async function openEditor(mode) {
+async function openEditor(mode = "bg") {
   if (!form.original) return;
-  hint("loading…");
+  ed.mode = mode;
+  $("#cut-title").textContent = mode === "inside" ? "Mark the inside" : "Touch up";
+  $("#cut-auto").hidden = mode === "inside";
+  $("#cut-front").hidden = mode !== "inside";
+  hint("Loading…");
   $("#cut-dialog").showModal();
   ed.pix = await Cutout.loadPixels(form.original);
-  ed.mask = await Cutout.maskFromCut(ed.pix, form.cut ? form.blob : null, form.cut);
+  const main = await Cutout.maskFromCut(ed.pix, form.cut ? form.blob : null, form.cut);
+  if (mode === "inside") {
+    ed.base = main;
+    ed.mask = form.layer ? await Cutout.maskFromCut(ed.pix, form.layer.blob, form.layer.cut) : main.slice();
+  } else {
+    ed.base = null;
+    ed.mask = main;
+  }
   ed.undo = [];
   ed.pts = [];
   ed.out = new ImageData(ed.pix.W, ed.pix.H);
   cutCanvas.width = ed.pix.W;
   cutCanvas.height = ed.pix.H;
-  setTool("wand");
+  setTool("lasso");
   draw();
-  if (mode === "front") openFrontNow();
 }
 
 function setTool(t) {
   ed.tool = t;
-  document.querySelectorAll("#cut-tools .chip").forEach((c) => c.setAttribute("aria-checked", c.dataset.tool === t));
+  document.querySelectorAll("#cut-tools button").forEach((c) => c.setAttribute("aria-checked", c.dataset.tool === t));
   const brushy = t === "erase" || t === "restore";
-  $("#slider-label").textContent = brushy ? "Brush" : "Strength";
+  $("#cut-slider").parentElement.hidden = t === "lasso";
+  $("#slider-label").textContent = brushy ? "Brush size" : "Strength";
   Object.assign($("#cut-slider"), brushy ? { min: 6, max: 90, value: ed.size } : { min: 8, max: 80, value: ed.tol });
-  $("#shape-actions").hidden = t !== "shape" || !ed.pts.length;
-  hint(HINTS[t]);
+  hint(HINTS[ed.mode][t]);
 }
-$("#cut-tools").onclick = (e) => { const c = e.target.closest(".chip"); if (c) setTool(c.dataset.tool); };
+$("#cut-tools").onclick = (e) => { const c = e.target.closest("button"); if (c) setTool(c.dataset.tool); };
 $("#cut-slider").oninput = (e) => {
   if (ed.tool === "erase" || ed.tool === "restore") ed.size = +e.target.value; else ed.tol = +e.target.value;
 };
 
+// In inside mode nothing outside the main cutout can come back.
+function clampToBase() {
+  if (!ed.base) return;
+  const m = ed.mask, b = ed.base;
+  for (let p = 0; p < m.length; p++) if (m[p] > b[p]) m[p] = b[p];
+}
+
 function draw() {
-  const { W, H, data } = ed.pix, o = ed.out.data, m = ed.mask;
+  const { W, H, data } = ed.pix, o = ed.out.data, m = ed.mask, b = ed.base;
   for (let p = 0; p < W * H; p++) {
-    o[p * 4] = data[p * 4]; o[p * 4 + 1] = data[p * 4 + 1]; o[p * 4 + 2] = data[p * 4 + 2];
-    o[p * 4 + 3] = Math.max(m[p], 38); // removed bits stay faintly visible so you can restore them
+    let r = data[p * 4], g = data[p * 4 + 1], bl = data[p * 4 + 2], a;
+    if (b && b[p] > 40 && m[p] < b[p] - 40) {
+      // marked as inside: tint it so it's clear what will hide when layering
+      r = r * 0.45 + 217 * 0.55; g = g * 0.45 + 187 * 0.55; bl = bl * 0.45 + 143 * 0.55; a = 150;
+    } else {
+      a = Math.max(m[p], b ? 22 : 38); // removed parts stay faintly visible so you can restore them
+    }
+    o[p * 4] = r; o[p * 4 + 1] = g; o[p * 4 + 2] = bl; o[p * 4 + 3] = a;
   }
   const ctx = cutCanvas.getContext("2d");
   ctx.putImageData(ed.out, 0, 0);
-  if (ed.pts.length) {
+  if (ed.pts.length > 1) {
     const k = W / cutCanvas.getBoundingClientRect().width;
-    ctx.strokeStyle = "#c4553a"; ctx.fillStyle = "rgba(196,85,58,.25)"; ctx.lineWidth = 2.5 * k;
-    ctx.setLineDash([6 * k, 4 * k]);
+    ctx.strokeStyle = "#ededef"; ctx.fillStyle = "rgba(217,187,143,.25)"; ctx.lineWidth = 2 * k;
+    ctx.lineJoin = ctx.lineCap = "round";
     ctx.beginPath();
     ed.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    if (ed.pts.length > 2) { ctx.closePath(); ctx.fill(); }
+    ctx.fill();
     ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = "#c4553a";
-    ed.pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 5 * k, 0, 7); ctx.fill(); });
   }
 }
 let rafId = 0;
@@ -968,6 +1018,7 @@ function paintTo(x, y, k) {
   for (let s = 1; s <= steps; s++) {
     Cutout.brush(ed.mask, ed.pix.W, ed.pix.H, lx + ((x - lx) * s) / steps, ly + ((y - ly) * s) / steps, r, ed.tool === "restore");
   }
+  if (ed.tool === "restore") clampToBase();
   ed.last = [x, y];
   redraw();
 }
@@ -975,66 +1026,87 @@ function paintTo(x, y, k) {
 cutCanvas.addEventListener("pointerdown", (e) => {
   if (!ed.pix) return;
   const [x, y, k] = canvasPoint(e);
+  cutCanvas.setPointerCapture(e.pointerId);
   if (ed.tool === "wand") {
     pushUndo();
     const n = Cutout.wand(ed.pix, ed.mask, x, y, ed.tol);
-    if (!n) { ed.undo.pop(); hint("that spot's already cut"); }
-    else hint("snip ✂ — tap more, or turn Strength up if it missed some");
+    if (!n) { ed.undo.pop(); hint("That spot is already removed."); }
+    else hint("Removed. Tap more, or raise Strength if it missed some.");
     redraw();
-  } else if (ed.tool === "shape") {
-    ed.pts.push([x, y]);
-    $("#shape-actions").hidden = false;
-    redraw();
+  } else if (ed.tool === "lasso") {
+    ed.drawing = true;
+    ed.pts = [[x, y]];
   } else {
     pushUndo();
     ed.painting = true;
     ed.last = null;
-    cutCanvas.setPointerCapture(e.pointerId);
     paintTo(x, y, k);
   }
 });
 cutCanvas.addEventListener("pointermove", (e) => {
-  if (!ed.painting) return;
+  if (!ed.painting && !ed.drawing) return;
   const [x, y, k] = canvasPoint(e);
-  paintTo(x, y, k);
+  if (ed.painting) { paintTo(x, y, k); return; }
+  const [lx, ly] = ed.pts[ed.pts.length - 1];
+  if (Math.hypot(x - lx, y - ly) > 3 * k) { ed.pts.push([x, y]); redraw(); }
 });
-const stopPaint = () => { ed.painting = false; ed.last = null; };
-cutCanvas.addEventListener("pointerup", stopPaint);
-cutCanvas.addEventListener("pointercancel", stopPaint);
-
-$("#shape-cut").onclick = () => {
-  if (ed.pts.length < 3) { hint("tap at least 3 points"); return; }
-  pushUndo();
-  Cutout.cutPolygon(ed.mask, ed.pix.W, ed.pix.H, ed.pts);
-  ed.pts = [];
-  $("#shape-actions").hidden = true;
-  hint("cut ✂");
-  redraw();
+const stopPointer = () => {
+  if (ed.drawing) {
+    ed.drawing = false;
+    if (ed.pts.length > 4) {
+      pushUndo();
+      Cutout.cutPolygon(ed.mask, ed.pix.W, ed.pix.H, ed.pts);
+      hint(ed.mode === "inside" ? "Marked. Draw more, or tap Done." : "Removed. Draw more, or tap Done.");
+    }
+    ed.pts = [];
+    redraw();
+  }
+  ed.painting = false;
+  ed.last = null;
 };
-$("#shape-clear").onclick = () => { ed.pts = []; $("#shape-actions").hidden = true; redraw(); };
+cutCanvas.addEventListener("pointerup", stopPointer);
+cutCanvas.addEventListener("pointercancel", stopPointer);
 
 $("#cut-auto").onclick = () => {
   pushUndo();
   const m = Cutout.removeBackground(ed.pix, ed.tol);
-  if (m) { ed.mask.set(m); hint("background gone ✨ — not quite? nudge Strength and try again"); }
-  else { ed.undo.pop(); hint("couldn't find a plain background — use the wand or shape tool"); }
+  if (m) { ed.mask.set(m); hint("Background removed. If it's not quite right, change Strength and try again."); }
+  else { ed.undo.pop(); hint("Couldn't find a plain background. Draw around it instead."); }
   redraw();
 };
-function openFrontNow() {
+$("#cut-front").onclick = () => {
   pushUndo();
   const r = Cutout.openFront(ed.pix, ed.mask, ed.tol);
-  if (r.ok) hint("opened up the front 🧥 — it'll layer over tops now");
-  else { ed.undo.pop(); setTool("shape"); hint(r.why); }
+  if (r.ok) hint("Found the inside. Draw to adjust, or tap Done.");
+  else { ed.undo.pop(); setTool("lasso"); hint("Couldn't find the inside automatically. Draw around it instead."); }
   redraw();
-}
-$("#cut-front").onclick = openFrontNow;
-$("#cut-undo").onclick = () => { const m = ed.undo.pop(); if (m) { ed.mask.set(m); redraw(); } else hint("nothing to undo"); };
-$("#cut-reset").onclick = () => { pushUndo(); ed.mask.fill(255); ed.pts = []; redraw(); hint("back to the original photo"); };
+};
+$("#cut-undo").onclick = () => { const m = ed.undo.pop(); if (m) { ed.mask.set(m); redraw(); } else hint("Nothing to undo."); };
+$("#cut-reset").onclick = () => {
+  pushUndo();
+  if (ed.base) ed.mask.set(ed.base); else ed.mask.fill(255);
+  ed.pts = [];
+  redraw();
+  hint(ed.base ? "Cleared the marked inside." : "Back to the original photo.");
+};
 
 $("#cut-done").onclick = async () => {
-  const res = await Cutout.render(ed.pix, ed.mask);
-  if (res) Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
-  else Object.assign(form, { blob: form.original, cut: null, ratio: ed.pix.W / ed.pix.H });
+  const { pix, mask } = ed;
+  if (ed.mode === "inside") {
+    let marked = 0, total = 0;
+    for (let p = 0; p < mask.length; p++) { if (ed.base[p] > 128) { total++; if (mask[p] < ed.base[p] - 60) marked++; } }
+    form.layer = marked > total * 0.005 ? await Cutout.render(pix, mask) : null;
+  } else {
+    const res = await Cutout.render(pix, mask);
+    if (res) Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
+    else Object.assign(form, { blob: form.original, cut: null, ratio: pix.W / pix.H });
+    if (form.layer) {
+      // keep the marked inside, trimmed to the new cutout
+      const lm = await Cutout.maskFromCut(pix, form.layer.blob, form.layer.cut);
+      for (let p = 0; p < lm.length; p++) if (lm[p] > mask[p]) lm[p] = mask[p];
+      form.layer = await Cutout.render(pix, lm);
+    }
+  }
   setPreview(form.blob);
   $("#cut-dialog").close();
 };
@@ -1048,7 +1120,7 @@ async function loadSamples(announce = true) {
   state.outfits.push(...outfits);
   renderCloset();
   renderDrawer();
-  if (announce) toast(`Hung up ${items.length} sample pieces ✨`);
+  if (announce) toast(`Added ${items.length} sample pieces`);
 }
 
 async function removeSamples() {
@@ -1072,7 +1144,7 @@ $("#remove-samples").onclick = async () => {
   $("#menu-dialog").close();
   if (!(await confirmBox("Remove the sample pieces and their looks? Your own pieces stay."))) return;
   await removeSamples();
-  toast("Samples cleared. The closet's all yours");
+  toast("Sample pieces removed");
 };
 
 /* ───────────── backup ───────────── */
@@ -1093,11 +1165,12 @@ $("#menu-btn").onclick = async () => {
 };
 
 $("#export-btn").onclick = async () => {
-  toast("Packing your closet…");
+  toast("Preparing backup…");
   const items = await Promise.all(state.items.map(async (i) => ({
     ...i,
     image: await toDataURL(i.image),
     original: i.original && i.original !== i.image ? await toDataURL(i.original) : null,
+    layer: i.layer ? { ...i.layer, blob: await toDataURL(i.layer.blob) } : null,
   })));
   const data = { app: "apps-and-daps", version: 1, exportedAt: new Date().toISOString(), items, outfits: state.outfits };
   const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
@@ -1108,7 +1181,7 @@ $("#export-btn").onclick = async () => {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  toast("Backup saved 💾");
+  toast("Backup saved");
 };
 
 $("#import-btn").onclick = () => $("#import-file").click();
@@ -1121,7 +1194,8 @@ $("#import-file").onchange = async (e) => {
     if (data.app !== "apps-and-daps") throw new Error("not a backup");
     for (const raw of data.items || []) {
       const image = await fromDataURL(raw.image);
-      const item = { ...raw, image, original: raw.original ? await fromDataURL(raw.original) : image };
+      const item = { ...raw, image, original: raw.original ? await fromDataURL(raw.original) : image,
+        layer: raw.layer ? { ...raw.layer, blob: await fromDataURL(raw.layer.blob) } : null };
       await idb.put("items", item);
       urls.delete(item.id);
       alphaMaps.delete(item.id);
@@ -1135,7 +1209,7 @@ $("#import-file").onchange = async (e) => {
     renderCloset();
     renderDrawer();
     renderOutfits();
-    toast(`Restored ${data.items?.length ?? 0} pieces & ${data.outfits?.length ?? 0} looks ✨`);
+    toast(`Restored ${data.items?.length ?? 0} pieces and ${data.outfits?.length ?? 0} looks`);
   } catch {
     toast("That file doesn't look like an Apps & Daps backup");
   }
@@ -1144,10 +1218,9 @@ $("#import-file").onchange = async (e) => {
 if (window.APP_DEMO) {
   // Test-drive build: files can't be saved from the preview, so hide backup.
   $("#export-btn").hidden = $("#import-btn").hidden = true;
-  $("#menu-dialog .sheet-copy").textContent = "This is a test drive. The sample pieces are illustrations; add your own photos with the + button. Backups work in the installed app.";
+  $("#menu-dialog .sheet-copy").textContent = "This is a test drive. The sample pieces are illustrations. Add your own photos with the + button. Backups work in the installed app.";
 }
 
-$("#tagline").textContent = TAGLINES[Math.floor(Math.random() * TAGLINES.length)];
 
 (async function init() {
   try {
