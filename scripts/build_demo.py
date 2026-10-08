@@ -12,7 +12,7 @@ head = html.split("<head>")[1].split("</head>")[0]
 body = html.split("<body>")[1].split("</body>")[0]
 fonts = re.search(r'<link href="https://fonts.googleapis.com[^>]+>', head).group(0)
 body = re.sub(r'\s*<script src="[^"]+"></script>', "", body)
-scripts = "".join(f"\n<script>\n{(root / f).read_text()}\n</script>" for f in ["cutout.js", "samples.js", "app.js"])
+scripts = "".join(f"\n<script>\n{(root / f).read_text()}\n</script>" for f in ["cutout.js", "samples.js", "outfit-photo.js", "app.js"])
 
 Path(sys.argv[1]).write_text(f"""<title>Apps &amp; Daps</title>
 <meta name="description" content="Snap your clothes, scroll your closet, style your outfits.">

@@ -280,5 +280,5 @@ const Cutout = (() => {
     return { blob, cut: { x: minX, y: minY, w, h }, ratio: w / h };
   }
 
-  return { loadPixels, maskFromCut, removeBackground, wand, openFront, brush, cutPolygon, render };
+  return { loadPixels, maskFromCut, removeBackground, wand, openFront, brush, cutPolygon, render, keepBigPieces, softenEdges };
 })();

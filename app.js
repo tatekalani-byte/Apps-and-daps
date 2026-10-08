@@ -1111,6 +1111,165 @@ $("#cut-done").onclick = async () => {
   $("#cut-dialog").close();
 };
 
+/* ───────────── add from outfit photo ───────────── */
+const NOUNS = { Tops: "top", Bottoms: "bottoms", Dresses: "dress", Outerwear: "jacket", Shoes: "shoes", Bags: "bag", Accessories: "accessory", Jewelry: "jewelry" };
+const height = {
+  get in() { try { return parseFloat(localStorage.getItem("heightIn")) || null; } catch { return null; } },
+  set in(v) { try { localStorage.setItem("heightIn", String(v)); } catch {} },
+};
+let opPhoto = null;   // the shrunk photo blob
+let opFound = [];     // [{category, name, color, res, inchPerPx, keep}]
+
+function opShow(step) {
+  for (const s of ["intro", "working", "results"]) $(`#op-${s}`).hidden = s !== step;
+}
+function opStatus(text, frac) {
+  $("#op-status").textContent = text;
+  $(".progress").classList.toggle("is-indeterminate", frac == null);
+  $("#op-bar").style.width = frac == null ? "" : `${Math.round(frac * 100)}%`;
+}
+
+function openOutfitPhoto() {
+  if ($("#item-dialog").open) { form.queue = []; $("#item-dialog").close(); }
+  opShow("intro");
+  $("#op-height-unit").textContent = unit.v;
+  $("#op-height").value = height.in ? fromInches(height.in) : "";
+  $("#op-height").placeholder = fromInches(66);
+  if (window.APP_DEMO) {
+    // the chat preview blocks the model download
+    $("#op-note").textContent = "Outfit photos need the installed app. This test drive can't download the clothing-recognition model.";
+    $("#op-camera").disabled = $("#op-library").disabled = true;
+  }
+  $("#outfit-dialog").showModal();
+}
+
+// Nearest named swatch to a piece's average color.
+function nameColor(pix, mask) {
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let p = 0; p < mask.length; p += 3) {
+    if (mask[p] < 200) continue;
+    r += pix.data[p * 4]; g += pix.data[p * 4 + 1]; b += pix.data[p * 4 + 2]; n++;
+  }
+  if (!n) return null;
+  r /= n; g /= n; b /= n;
+  let best = null, bd = Infinity;
+  for (const [name, hex] of Object.entries(COLORS)) {
+    if (!hex.startsWith("#") || name === "gold" || name === "silver") continue;
+    const R = parseInt(hex.slice(1, 3), 16), G = parseInt(hex.slice(3, 5), 16), B = parseInt(hex.slice(5, 7), 16);
+    const rm = (r + R) / 2; // "redmean" distance, closer to how eyes compare colors
+    const d = (2 + rm / 256) * (r - R) ** 2 + 4 * (g - G) ** 2 + (2 + (255 - rm) / 256) * (b - B) ** 2;
+    if (d < bd) { bd = d; best = name; }
+  }
+  return best;
+}
+
+// Measurement for a piece's category, from its size in the photo.
+function sizeFromPhoto(category, cut, inchPerPx) {
+  if (!inchPerPx || !cut) return null;
+  const axis = SIZE_INFO[category]?.axis ?? "w";
+  const px = axis === "h" ? cut.h : axis === "w" ? cut.w : Math.max(cut.w, cut.h) / 1.15;
+  return Math.round(px * inchPerPx * 2) / 2;
+}
+
+async function processOutfitPhoto(file) {
+  const h = parseFloat($("#op-height").value);
+  if (h > 0) height.in = toInches(h);
+  const heightIn = height.in || 66;
+  opShow("working");
+  try {
+    opStatus("Preparing photo…");
+    const { blob } = await shrink(file, 1100);
+    opPhoto = blob;
+    const pix = await Cutout.loadPixels(blob);
+    if (!OutfitPhoto.ready()) opStatus("Downloading the clothing model (one time)…", 0);
+    await OutfitPhoto.load((l, t) => opStatus(`Downloading the clothing model (one time) · ${(l / 1048576).toFixed(1)} of ${(t / 1048576).toFixed(1)} MB`, l / t));
+    opStatus("Finding your clothes…");
+    await new Promise((r) => setTimeout(r, 30));
+    const lab = await OutfitPhoto.labelPixels(blob, pix.W, pix.H);
+    opStatus("Cutting out each piece…");
+    await new Promise((r) => setTimeout(r, 30));
+    const { pieces, inchPerPx } = OutfitPhoto.extract(pix, lab, heightIn);
+    opFound = [];
+    for (const pc of pieces) {
+      const res = await Cutout.render(pc.pix, pc.mask);
+      if (!res) continue;
+      const color = nameColor(pc.pix, pc.mask);
+      opFound.push({ category: pc.category, noun: pc.noun, color, res, inchPerPx, keep: true,
+        name: [color, pc.noun].filter(Boolean).join(" ") });
+    }
+    if (!opFound.length) {
+      opShow("intro");
+      toast("Couldn't find any clothes. Try a full-body photo against a plain wall.");
+      return;
+    }
+    renderOutfitResults();
+    opShow("results");
+  } catch (err) {
+    console.error(err);
+    opShow("intro");
+    toast("Couldn't load the clothing model. Check your connection and try again.");
+  }
+}
+
+function renderOutfitResults() {
+  const n = opFound.length;
+  $("#op-found").textContent = `Found ${n} piece${n === 1 ? "" : "s"}. Untick anything you don't want, and fix the category if it's wrong (a jacket can come through as a top).`;
+  opFound.forEach((f) => { f.url ??= URL.createObjectURL(f.res.blob); });
+  $("#op-pieces").innerHTML = opFound.map((f, i) => `
+    <div class="op-piece${f.keep ? "" : " is-off"}" data-i="${i}">
+      <label class="op-piece-pic"><input type="checkbox" data-keep ${f.keep ? "checked" : ""} aria-label="Keep this piece"><img src="${f.url}" alt=""></label>
+      <select data-cat aria-label="Category">${CATEGORIES.map((c) => `<option${c === f.category ? " selected" : ""}>${c}</option>`).join("")}</select>
+      <input type="text" data-name value="${esc(f.name)}" maxlength="60" aria-label="Name">
+    </div>`).join("");
+}
+$("#op-pieces").addEventListener("change", (e) => {
+  const card = e.target.closest(".op-piece");
+  if (!card) return;
+  const f = opFound[+card.dataset.i];
+  if (e.target.matches("[data-keep]")) { f.keep = e.target.checked; card.classList.toggle("is-off", !f.keep); }
+  if (e.target.matches("[data-cat]")) f.category = e.target.value;
+});
+$("#op-pieces").addEventListener("input", (e) => {
+  const card = e.target.closest(".op-piece");
+  if (card && e.target.matches("[data-name]")) opFound[+card.dataset.i].name = e.target.value;
+});
+
+$("#op-add").onclick = async () => {
+  const keep = opFound.filter((f) => f.keep);
+  if (!keep.length) { toast("Tick at least one piece"); return; }
+  const now = Date.now();
+  const items = keep.map((f, n) => ({
+    id: uid(), name: f.name.trim(), category: f.category, color: f.color, tags: [],
+    size: sizeFromPhoto(f.category, f.res.cut, f.inchPerPx),
+    image: f.res.blob, original: opPhoto, cut: f.res.cut, layer: null, ratio: f.res.ratio,
+    fav: false, createdAt: now + n,
+  }));
+  for (const i of items) await idb.put("items", i);
+  state.items.push(...items);
+  if ($("#op-look").checked) {
+    const look = { id: uid(), name: `Outfit, ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+      vibe: VIBES[0], createdAt: now, pieces: items.map((i) => ({ itemId: i.id, dx: 0, dy: 0, tuck: false })) };
+    await idb.put("outfits", look);
+    state.outfits.push(look);
+  }
+  opFound.forEach((f) => f.url && URL.revokeObjectURL(f.url));
+  opFound = [];
+  $("#outfit-dialog").close();
+  renderCloset();
+  renderDrawer();
+  toast(`Added ${items.length} piece${items.length === 1 ? "" : "s"}`);
+};
+$("#op-retake").onclick = () => opShow("intro");
+$("#op-camera").onclick = () => $("#op-file-camera").click();
+$("#op-library").onclick = () => $("#op-file-library").click();
+for (const id of ["#op-file-camera", "#op-file-library"]) {
+  $(id).onchange = (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (f) processOutfitPhoto(f);
+  };
+}
+
 /* ───────────── sample closet ───────────── */
 async function loadSamples(announce = true) {
   const { items, outfits } = await Samples.build(uid);
@@ -1139,6 +1298,7 @@ async function removeSamples() {
 
 document.addEventListener("click", (e) => {
   if (e.target.closest('[data-action="samples"]')) loadSamples();
+  if (e.target.closest('[data-action="outfit-photo"]')) openOutfitPhoto();
 });
 $("#remove-samples").onclick = async () => {
   $("#menu-dialog").close();

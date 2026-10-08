@@ -60,6 +60,7 @@
         <p>Lay a piece flat on something plain that contrasts with it, like a white tee on a dark floor, and take a photo. The background is removed for you.</p>
         <div class="empty-actions">
           <button class="btn btn-primary" data-action="add">Add your first piece</button>
+          <button class="btn btn-ghost" data-action="outfit-photo">Add from outfit photo</button>
           <button class="btn btn-ghost" data-action="samples">Try a sample closet</button>
         </div>
       </div>
@@ -123,6 +124,7 @@
     <form method="dialog" id="item-form">
       <div class="sheet-grip" aria-hidden="true"></div>
       <h2 id="item-dialog-title" class="sheet-title">New piece</h2>
+      <button type="button" class="link-btn" id="open-outfit" data-action="outfit-photo">Wearing it? Add a whole outfit from one photo</button>
 
       <div class="photo-pick">
         <div id="photo-preview" class="photo-preview">
@@ -177,6 +179,54 @@
       </div>
     </form>
   </dialog>
+
+  <!-- OUTFIT PHOTO -->
+  <dialog id="outfit-dialog" class="sheet">
+    <form method="dialog" id="outfit-form">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title">Add from outfit photo</h2>
+
+      <div id="op-intro">
+        <p class="sheet-copy">Take a photo of yourself wearing the outfit. Each piece is cut out on its own, with you and the background removed.</p>
+        <ul class="tips">
+          <li>Full body, from head to shoes</li>
+          <li>Stand straight with your arms a little away from your body</li>
+          <li>A plain wall and good light help</li>
+          <li>Have someone take it, or use a timer, so your phone isn't covering anything</li>
+        </ul>
+        <div class="field">
+          <span>Your height</span>
+          <div class="size-row">
+            <input id="op-height" type="number" inputmode="decimal" min="0" step="0.5" aria-label="Your height">
+            <span id="op-height-unit" class="unit-label"></span>
+          </div>
+          <small class="field-hint">Used to size each piece. Stored only on this device.</small>
+        </div>
+        <div class="photo-buttons photo-buttons-row">
+          <button type="button" class="btn btn-primary" id="op-camera"><svg class="ico" aria-hidden="true"><use href="#i-camera"/></svg>Take photo</button>
+          <button type="button" class="btn btn-ghost" id="op-library"><svg class="ico" aria-hidden="true"><use href="#i-image"/></svg>Choose photo</button>
+        </div>
+        <p id="op-note" class="field-hint">The first time, the app downloads a clothing-recognition model (about 30 MB). After that it works offline, and your photos never leave this device.</p>
+      </div>
+
+      <div id="op-working" class="op-working" hidden>
+        <div class="progress" aria-hidden="true"><div id="op-bar"></div></div>
+        <p id="op-status" class="count" role="status"></p>
+      </div>
+
+      <div id="op-results" hidden>
+        <p id="op-found" class="sheet-copy"></p>
+        <div id="op-pieces" class="op-pieces"></div>
+        <label class="toggle op-look"><input type="checkbox" id="op-look" checked> Also save this outfit as a look</label>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-ghost" id="op-retake">Use another photo</button>
+          <button type="button" class="btn btn-primary" id="op-add">Add pieces</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+  <input id="op-file-camera" type="file" accept="image/*" capture="environment" hidden>
+  <input id="op-file-library" type="file" accept="image/*" hidden>
 
   <!-- CUTOUT EDITOR -->
   <dialog id="cut-dialog" class="sheet sheet-tall">
@@ -273,6 +323,7 @@
 
   <script src="cutout.js"></script>
   <script src="samples.js"></script>
+  <script src="outfit-photo.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
