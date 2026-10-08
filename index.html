@@ -44,7 +44,10 @@
         <div class="empty-collage" aria-hidden="true"><span>👗</span><span>👟</span><span>🧥</span></div>
         <h2>Your closet is a blank board</h2>
         <p>Lay a piece flat on something plain that contrasts with it (white tee → dark floor), good light, snap it. The background cuts itself out.</p>
-        <button class="btn btn-primary" data-action="add">Snap your first piece</button>
+        <div class="empty-actions">
+          <button class="btn btn-primary" data-action="add">Snap your first piece</button>
+          <button class="btn btn-ghost" data-action="samples">✨ Try a sample closet</button>
+        </div>
       </div>
     </section>
 
@@ -191,6 +194,7 @@
       <div class="sheet-actions sheet-actions-col">
         <button type="button" class="btn btn-primary" id="export-btn">⬇ Save backup file</button>
         <button type="button" class="btn btn-ghost" id="import-btn">⬆ Restore from backup</button>
+        <button type="button" class="btn btn-ghost danger" id="remove-samples" hidden>Remove sample pieces</button>
         <button class="btn btn-ghost" value="close">Close</button>
       </div>
     </form>
@@ -250,6 +254,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="cutout.js"></script>
+  <script src="samples.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -39,14 +39,23 @@ const idb = (() => {
       t.onerror = () => rej(t.error);
     });
   };
+  // Writes never throw: if the browser blocks storage, the app keeps working for this visit.
+  const safe = (fn) => async (...a) => { try { return await fn(...a); } catch { storageWarning(); } };
   return {
     all: (s) => run(s, "readonly", (st) => st.getAll()),
-    put: (s, v) => run(s, "readwrite", (st) => st.put(v)),
-    del: (s, k) => run(s, "readwrite", (st) => st.delete(k)),
+    put: safe((s, v) => run(s, "readwrite", (st) => st.put(v))),
+    del: safe((s, k) => run(s, "readwrite", (st) => st.delete(k))),
   };
 })();
 
 /* ───────────── state ───────────── */
+let storageWarned = false;
+function storageWarning() {
+  if (storageWarned) return;
+  storageWarned = true;
+  setTimeout(() => toast("This browser isn't saving, so changes last until you close the page"), 400);
+}
+
 const state = {
   items: [],
   outfits: [],
@@ -306,12 +315,7 @@ $("#item-form").addEventListener("submit", async (e) => {
     fav: existing?.fav ?? false,
     createdAt: existing?.createdAt ?? Date.now(),
   };
-  try {
-    await idb.put("items", item);
-  } catch {
-    toast("Couldn't save — phone storage might be full");
-    return;
-  }
+  await idb.put("items", item);
   if (existing) {
     if (existing.image !== item.image) { URL.revokeObjectURL(urls.get(item.id)); urls.delete(item.id); alphaMaps.delete(item.id); }
     state.items[state.items.indexOf(existing)] = item;
@@ -868,6 +872,42 @@ $("#cut-done").onclick = async () => {
   $("#cut-dialog").close();
 };
 
+/* ───────────── sample closet ───────────── */
+async function loadSamples(announce = true) {
+  const { items, outfits } = await Samples.build(uid);
+  for (const i of items) await idb.put("items", i);
+  for (const o of outfits) await idb.put("outfits", o);
+  state.items.push(...items);
+  state.outfits.push(...outfits);
+  renderCloset();
+  renderDrawer();
+  if (announce) toast(`Hung up ${items.length} sample pieces ✨`);
+}
+
+async function removeSamples() {
+  const gone = new Set(state.items.filter((i) => i.sample).map((i) => i.id));
+  for (const id of gone) { await idb.del("items", id); URL.revokeObjectURL(urls.get(id)); urls.delete(id); alphaMaps.delete(id); }
+  for (const o of state.outfits.filter((o) => o.sample)) await idb.del("outfits", o.id);
+  state.items = state.items.filter((i) => !i.sample);
+  state.outfits = state.outfits.filter((o) => !o.sample);
+  state.board = state.board.filter((p) => !gone.has(p.itemId));
+  state.selected = -1;
+  renderCloset();
+  renderDrawer();
+  renderBoard();
+  renderOutfits();
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest('[data-action="samples"]')) loadSamples();
+});
+$("#remove-samples").onclick = async () => {
+  $("#menu-dialog").close();
+  if (!(await confirmBox("Remove the sample pieces and their looks? Your own pieces stay."))) return;
+  await removeSamples();
+  toast("Samples cleared. The closet's all yours");
+};
+
 /* ───────────── backup ───────────── */
 const toDataURL = (blob) => new Promise((res, rej) => {
   const fr = new FileReader();
@@ -879,6 +919,7 @@ const fromDataURL = async (u) => (await fetch(u)).blob();
 
 $("#menu-btn").onclick = async () => {
   $("#storage-info").textContent = `${state.items.length} pieces · ${state.outfits.length} looks`;
+  $("#remove-samples").hidden = !state.items.some((i) => i.sample);
   $("#menu-dialog").showModal();
   const est = await navigator.storage?.estimate?.().catch(() => null);
   if (est?.usage) $("#storage-info").textContent += ` · ${(est.usage / 1048576).toFixed(1)} MB used`;
@@ -933,6 +974,12 @@ $("#import-file").onchange = async (e) => {
   }
 };
 
+if (window.APP_DEMO) {
+  // Test-drive build: files can't be saved from the preview, so hide backup.
+  $("#export-btn").hidden = $("#import-btn").hidden = true;
+  $("#menu-dialog .sheet-copy").textContent = "This is a test drive. The sample pieces are illustrations; add your own photos with the + button. Backups work in the installed app.";
+}
+
 $("#tagline").textContent = TAGLINES[Math.floor(Math.random() * TAGLINES.length)];
 
 (async function init() {
@@ -940,8 +987,9 @@ $("#tagline").textContent = TAGLINES[Math.floor(Math.random() * TAGLINES.length)
     [state.items, state.outfits] = await Promise.all([idb.all("items"), idb.all("outfits")]);
     navigator.storage?.persist?.();
   } catch (err) {
-    toast("Storage is blocked in this browser — pieces won't be saved");
+    storageWarning();
   }
+  if (!state.items.length && window.APP_DEMO) await loadSamples(false);
   renderCloset();
   renderDrawer();
   renderBoard();

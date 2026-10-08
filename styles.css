@@ -243,6 +243,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
 .empty { text-align: center; padding: 30px 12px 10px; }
 .empty h2 { font-family: var(--display); font-style: italic; font-weight: 600; font-size: 1.6rem; margin: 18px 0 6px; }
 .empty p { color: var(--ink-soft); margin: 0 auto 18px; max-width: 32ch; }
+.empty-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .empty-collage { display: flex; justify-content: center; gap: 0; }
 .empty-collage span {
   display: grid; place-items: center;

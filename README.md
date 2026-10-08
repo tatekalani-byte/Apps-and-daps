@@ -8,6 +8,7 @@ A mood-board style closet app. Snap pics of your clothes, scroll your closet lik
 - **Cutouts**: the background is cut out automatically when you add a photo. It works best on a plain background that contrasts with the piece. **Touch up cutout** opens a cut tool with a wand (tap to remove a patch of color), a shape tool (tap points around an area), and erase/restore brushes.
 - **Jackets & layering**: for Outerwear, **Cut out the inside** finds the lining/back panel showing through the open front and removes it. On the board, a cut-out jacket snaps over the top that's already there, and you can tap through the opening to grab the shirt underneath.
 - **Style**: tap pieces to pin them on a board. Drag to move them, and pinch to resize and twist (or use the buttons). Hit 🎲 **Shuffle** for a random fit.
+- **Sample closet**: on an empty closet, **✨ Try a sample closet** loads 20 illustrated vintage pieces and 3 layered looks. Remove them anytime from the ⋯ menu.
 - **Looks**: your saved outfits, labeled with a vibe. Tap one to keep editing it.
 
 Everything, photos included, is saved **on your device** (IndexedDB). There's no account and no server, and cutouts are computed on the phone. Clearing your browser's site data wipes the closet, so use **⋯ → Save backup file** now and then. The same menu restores a backup, for example onto a new phone.
