@@ -1,0 +1,15 @@
+{
+  "name": "Apps & Daps",
+  "short_name": "Apps & Daps",
+  "description": "Snap your clothes, scroll your closet, style your outfits.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3e9dc",
+  "theme_color": "#f3e9dc",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

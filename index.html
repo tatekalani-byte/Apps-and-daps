@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Apps &amp; Daps</title>
+  <meta name="description" content="Snap your clothes, scroll your closet, style your outfits.">
+  <meta name="theme-color" content="#f3e9dc">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Apps &amp; Daps">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,800;1,9..144,400;1,9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <span class="brand-star" aria-hidden="true">✦</span>
+      <h1>Apps <em>&amp;</em> Daps</h1>
+    </div>
+    <p class="tagline" id="tagline">your closet, but make it a mood board</p>
+  </header>
+
+  <main>
+    <!-- CLOSET -->
+    <section id="view-closet" class="view is-active" aria-label="Closet">
+      <div class="toolbar">
+        <label class="search">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="search name, color, tag…" autocomplete="off">
+        </label>
+        <button id="fav-toggle" class="chip chip-heart" aria-pressed="false" title="Favorites only">♥</button>
+      </div>
+      <div id="closet-chips" class="chips" role="tablist" aria-label="Filter by category"></div>
+      <p id="closet-count" class="count"></p>
+      <div id="closet-grid" class="masonry"></div>
+      <div id="closet-empty" class="empty" hidden>
+        <div class="empty-collage" aria-hidden="true"><span>👗</span><span>👟</span><span>🧥</span></div>
+        <h2>Your closet is a blank board</h2>
+        <p>Lay a piece flat, good light, snap it. That's the whole vibe.</p>
+        <button class="btn btn-primary" data-action="add">Snap your first piece</button>
+      </div>
+    </section>
+
+    <!-- BUILDER -->
+    <section id="view-builder" class="view" aria-label="Outfit builder">
+      <div class="builder-head">
+        <h2 class="section-title">Style <em>it</em></h2>
+        <div class="builder-actions">
+          <button class="btn btn-ghost" id="shuffle-btn" title="Randomize an outfit">🎲 Shuffle</button>
+          <button class="btn btn-ghost" id="clear-btn">Clear</button>
+          <button class="btn btn-primary" id="save-outfit-btn">Save look</button>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div id="board" class="board">
+          <p id="board-hint" class="board-hint">tap pieces below to pin them here ↓<br><small>drag to move · pinch to resize &amp; twist</small></p>
+        </div>
+        <div id="piece-tools" class="piece-tools" hidden>
+          <button data-tool="smaller" title="Smaller">−</button>
+          <button data-tool="bigger" title="Bigger">+</button>
+          <button data-tool="ccw" title="Rotate left">↺</button>
+          <button data-tool="cw" title="Rotate right">↻</button>
+          <button data-tool="front" title="Bring to front">⬆</button>
+          <button data-tool="back" title="Send to back">⬇</button>
+          <button data-tool="remove" title="Remove" class="danger">✕</button>
+        </div>
+      </div>
+
+      <div class="drawer">
+        <div id="drawer-chips" class="chips chips-small"></div>
+        <div id="drawer-strip" class="strip"></div>
+      </div>
+    </section>
+
+    <!-- LOOKBOOK -->
+    <section id="view-outfits" class="view" aria-label="Lookbook">
+      <h2 class="section-title">The <em>lookbook</em></h2>
+      <div id="outfit-grid" class="lookbook"></div>
+      <div id="outfits-empty" class="empty" hidden>
+        <div class="empty-collage" aria-hidden="true"><span>✨</span><span>🪩</span><span>💋</span></div>
+        <h2>No looks saved yet</h2>
+        <p>Head to <strong>Style</strong>, pin a few pieces, and save the fit.</p>
+        <button class="btn btn-primary" data-goto="builder">Start styling</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Main">
+    <button class="tab is-active" data-goto="closet"><span class="tab-ico">◫</span>Closet</button>
+    <button class="tab-add" data-action="add" aria-label="Add a piece">+</button>
+    <button class="tab" data-goto="builder"><span class="tab-ico">✂</span>Style</button>
+    <button class="tab" data-goto="outfits"><span class="tab-ico">❦</span>Looks</button>
+  </nav>
+
+  <!-- hidden file inputs -->
+  <input id="file-camera" type="file" accept="image/*" capture="environment" hidden>
+  <input id="file-library" type="file" accept="image/*" multiple hidden>
+
+  <!-- ADD / EDIT ITEM -->
+  <dialog id="item-dialog" class="sheet">
+    <form method="dialog" id="item-form">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 id="item-dialog-title" class="sheet-title">New piece</h2>
+
+      <div class="photo-pick">
+        <div id="photo-preview" class="photo-preview">
+          <span>no pic yet</span>
+        </div>
+        <div class="photo-buttons">
+          <button type="button" class="btn btn-primary" id="pick-camera">📸 Snap a pic</button>
+          <button type="button" class="btn btn-ghost" id="pick-library">🖼 Camera roll</button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Name it</span>
+        <input id="f-name" type="text" placeholder="e.g. thrifted leather jacket" maxlength="60">
+      </label>
+
+      <div class="field">
+        <span>Category</span>
+        <div id="f-category" class="chips chips-wrap" role="radiogroup"></div>
+      </div>
+
+      <div class="field">
+        <span>Color</span>
+        <div id="f-color" class="swatches" role="radiogroup"></div>
+      </div>
+
+      <label class="field">
+        <span>Tags <small>(comma separated)</small></span>
+        <input id="f-tags" type="text" placeholder="vintage, date night, summer">
+      </label>
+
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-ghost" value="cancel" id="item-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="item-save">Hang it up</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ITEM DETAIL -->
+  <dialog id="detail-dialog" class="sheet">
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <div class="detail">
+      <div class="polaroid"><img id="d-img" alt=""><p id="d-caption" class="polaroid-caption"></p></div>
+      <div class="detail-meta">
+        <p id="d-meta" class="detail-line"></p>
+        <div id="d-tags" class="tag-row"></div>
+        <p id="d-used" class="detail-small"></p>
+      </div>
+      <div class="sheet-actions sheet-actions-wrap">
+        <button class="btn btn-ghost" id="d-fav">♡ Fave</button>
+        <button class="btn btn-ghost" id="d-edit">Edit</button>
+        <button class="btn btn-ghost danger" id="d-delete">Delete</button>
+        <button class="btn btn-primary" id="d-style">Style it ✂</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- SAVE OUTFIT -->
+  <dialog id="save-dialog" class="sheet">
+    <form method="dialog" id="save-form">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title">Name this look</h2>
+      <label class="field">
+        <span>Title</span>
+        <input id="o-name" type="text" placeholder="Sunday brunch, but make it jazz" maxlength="60">
+      </label>
+      <div class="field">
+        <span>Vibe</span>
+        <div id="o-vibe" class="chips chips-wrap"></div>
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-ghost" id="save-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Pin it</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- CONFIRM -->
+  <dialog id="confirm-dialog" class="sheet sheet-small">
+    <form method="dialog">
+      <h2 id="confirm-text" class="sheet-title"></h2>
+      <div class="sheet-actions">
+        <button class="btn btn-ghost" value="no">Never mind</button>
+        <button class="btn btn-primary danger-fill" value="yes">Yes, do it</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
