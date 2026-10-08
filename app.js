@@ -11,11 +11,11 @@ const COLORS = {
 };
 const VIBES = ["Everyday", "Date night", "Brunch", "Work", "Going out", "Cozy", "Vacation", "Special occasion"];
 const TAGLINES = [
-  "your closet, but make it a mood board",
-  "fits on fits on fits",
-  "main character wardrobe energy",
-  "pin it, wear it, love it",
-  "curated chaos, beautifully",
+  "dressed for the late set",
+  "city of stars, closet of fits",
+  "your closet after midnight",
+  "see you, style cowboy",
+  "one more song, one more outfit",
 ];
 
 /* ───────────── storage ───────────── */
@@ -221,7 +221,8 @@ const toInches = (n) => (unit.v === "cm" ? n / 2.54 : n);
 function renderSizeField() {
   const info = SIZE_INFO[form.category];
   $("#f-size-label").textContent = info.label;
-  $("#f-size").placeholder = `typical: ${fromInches(info.def)}`;
+  $("#f-size").placeholder = fromInches(info.def);
+  $("#f-size-hint").textContent = `Lay it flat and measure, so it's sized right in outfits. Leave it blank to use a typical ${fromInches(info.def)} ${unit.v}.`;
   document.querySelectorAll("#f-unit button").forEach((b) => b.setAttribute("aria-checked", b.dataset.unit === unit.v));
 }
 $("#f-unit").onclick = (e) => {
@@ -492,6 +493,106 @@ function pieceHTML(p, i, selectable) {
     <img src="${imgUrl(item)}" alt="${esc(item.name || item.category)}" draggable="false"></div>`;
 }
 
+/* Under a jacket, a top's sleeves are hidden (they'd be inside the jacket's sleeves):
+   each under-layer is clipped, row by row, to the jacket's torso. The neckline above
+   the jacket and the body below a cropped hem stay visible. */
+const imgEl = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+const spanCache = new Map(); // jacket image url -> Promise<{L, R, H}>
+function torsoSpans(item) {
+  const src = imgUrl(item);
+  if (!spanCache.has(src)) spanCache.set(src, (async () => {
+    const img = await imgEl(src);
+    const W = 240, H = Math.max(1, Math.round(W / (img.naturalWidth / img.naturalHeight)));
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, H);
+    const d = ctx.getImageData(0, 0, W, H).data;
+    const solid = (x, y) => d[(y * W + x) * 4 + 3] > 40;
+    const L = new Float32Array(H).fill(-1), R = new Float32Array(H).fill(-1);
+    const mid = W >> 1, gap = Math.round(W * 0.18); // an open front is at most this wide each side
+    for (let y = 0; y < H; y++) {
+      // from the middle: through the open front, then across the front panel.
+      // Rows with no panel near the middle (only sleeve cuffs) borrow the row above.
+      let l = mid; while (l > mid - gap && !solid(l, y)) l--;
+      if (!solid(l, y)) continue;
+      while (l > 0 && solid(l - 1, y)) l--;
+      let r = mid; while (r < mid + gap && !solid(r, y)) r++;
+      if (!solid(r, y)) continue;
+      while (r < W - 1 && solid(r + 1, y)) r++;
+      L[y] = l / W; R[y] = (r + 1) / W;
+    }
+    for (let y = 1; y < H; y++) if (L[y] < 0) { L[y] = L[y - 1]; R[y] = R[y - 1]; }
+    return { L, R, H };
+  })());
+  return spanCache.get(src);
+}
+
+const clipCache = new Map(); // key -> Promise<url>
+const clipDone = new Map();  // key -> url, for instant reuse
+const inchRect = (p, ratio) => {
+  const w = (p.w / 100) * FIG.w, h = w / ratio;
+  return { l: (p.x / 100) * FIG.w - w / 2, t: (p.y / 100) * FIG.h - h / 2, w, h };
+};
+function clipKey(under, pu, over, po) {
+  return [imgUrl(under), imgUrl(over), pu.x, pu.y, pu.w, po.x, po.y, po.w].map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join("|");
+}
+function clippedUrl(under, pu, over, po) {
+  const key = clipKey(under, pu, over, po);
+  if (!clipCache.has(key)) clipCache.set(key, (async () => {
+    const [img, sp] = await Promise.all([imgEl(imgUrl(under)), torsoSpans(over)]);
+    const k = Math.min(1, 700 / Math.max(img.naturalWidth, img.naturalHeight));
+    const W = Math.round(img.naturalWidth * k), H = Math.round(img.naturalHeight * k);
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, H);
+    const data = ctx.getImageData(0, 0, W, H);
+    const a = data.data;
+    const U = inchRect(pu, W / H), J = inchRect(po, (over.ratio || 0.8));
+    const keepBelow = under.category === "Dresses"; // a skirt below the hem isn't a sleeve
+    const soft = 0.12; // inches of feathering at the cut
+    for (let y = 0; y < H; y++) {
+      const jr = (U.t + ((y + 0.5) / H) * U.h - J.t) / J.h;
+      if (jr < 0 || (jr >= 1 && keepBelow)) continue;
+      const row = Math.min(sp.H - 1, Math.floor(Math.min(jr, 0.999) * sp.H));
+      if (sp.L[row] < 0) continue;
+      const xl = J.l + sp.L[row] * J.w, xr = J.l + sp.R[row] * J.w;
+      for (let x = 0; x < W; x++) {
+        const xi = U.l + ((x + 0.5) / W) * U.w;
+        const t = Math.min(xi - xl, xr - xi);
+        if (t < soft) a[(y * W + x) * 4 + 3] *= Math.max(0, t / soft);
+      }
+    }
+    ctx.putImageData(data, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.92));
+    const url = URL.createObjectURL(blob);
+    clipDone.set(key, url);
+    return url;
+  })().catch(() => null));
+  return clipCache.get(key);
+}
+
+// Swap clipped images in for every top/dress layered under a jacket.
+function applyClips(container, list) {
+  const jackets = list.filter((p) => p && itemById(p.itemId)?.category === "Outerwear").sort((a, b) => b.z - a.z);
+  if (!jackets.length) return;
+  const jp = jackets[0], jacket = itemById(jp.itemId);
+  list.forEach((p, i) => {
+    const item = p && itemById(p.itemId);
+    if (!item || !["Tops", "Dresses"].includes(item.category) || p.z > jp.z) return;
+    const el = container.querySelector(`.piece[data-i="${i}"] img`);
+    if (!el) return;
+    const key = clipKey(item, p, jacket, jp);
+    if (clipDone.has(key)) { el.src = clipDone.get(key); return; }
+    el.style.visibility = "hidden"; // avoid a flash of sleeves
+    clippedUrl(item, p, jacket, jp).then((u) => {
+      if (u && el.isConnected) el.src = u;
+      el.style.visibility = "";
+    });
+  });
+}
+
 let placed = [];
 function renderBoard() {
   state.board = state.board.filter((p) => itemById(p.itemId));
@@ -499,6 +600,7 @@ function renderBoard() {
   placed = layout(state.board);
   board.querySelectorAll(".piece").forEach((n) => n.remove());
   board.insertAdjacentHTML("beforeend", placed.map((p, i) => pieceHTML(p, i, true)).join(""));
+  applyClips(board, placed);
   state.board.forEach((p) => alphaMap(itemById(p.itemId)));
   $("#board-hint").hidden = state.board.length > 0;
   renderTools();
@@ -565,7 +667,7 @@ $("#piece-tools").addEventListener("click", (e) => {
   const p = state.board[state.selected];
   if (!tool || !p) return;
   if (tool === "tuck") { p.tuck = !p.tuck; refreshPositions(); renderTools(); }
-  if (tool === "reset") { p.dx = p.dy = 0; refreshPositions(); renderTools(); }
+  if (tool === "reset") { p.dx = p.dy = 0; refreshPositions(); renderTools(); applyClips(board, placed); }
   if (tool === "remove") { state.board.splice(state.selected, 1); state.selected = -1; renderBoard(); }
 });
 
@@ -670,6 +772,7 @@ const endDrag = (e) => {
   if (!drag || e.pointerId !== drag.id) return;
   drag = null;
   renderTools();
+  applyClips(board, placed);
 };
 board.addEventListener("pointerup", endDrag);
 board.addEventListener("pointercancel", endDrag);
@@ -737,13 +840,15 @@ $("#save-form").addEventListener("submit", async (e) => {
 function renderOutfits() {
   const list = [...state.outfits].sort((a, b) => b.createdAt - a.createdAt);
   $("#outfits-empty").hidden = list.length > 0;
+  const laid = new Map(list.map((o) => [o.id, layout(o.pieces)]));
   $("#outfit-grid").innerHTML = list.map((o) => `
     <div class="look" data-id="${o.id}" role="button" tabindex="0">
       <button class="look-del" data-del="${o.id}" aria-label="Delete look">✕</button>
-      <div class="mini-board">${layout(o.pieces).map((p, i) => pieceHTML(p, i, false)).join("")}</div>
+      <div class="mini-board">${laid.get(o.id).map((p, i) => pieceHTML(p, i, false)).join("")}</div>
       <p class="look-name">${esc(o.name)}</p>
       <span class="look-vibe">${esc(o.vibe)}</span>
     </div>`).join("");
+  document.querySelectorAll("#outfit-grid .look").forEach((card) => applyClips(card.querySelector(".mini-board"), laid.get(card.dataset.id)));
 }
 
 $("#outfit-grid").addEventListener("click", async (e) => {
