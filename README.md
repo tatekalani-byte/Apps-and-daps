@@ -26,4 +26,6 @@ python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
+Opened in a browser tab, the app shows an install screen with the right steps for the phone and browser (and an **Install app** button on Android). From the home screen it runs full screen like a regular app.
+
 To use it on your phone, host it anywhere static. For example, turn on **GitHub Pages** for this repo (Settings → Pages → deploy from branch). Then open the link on your phone and choose **Add to Home Screen** so it works like an app, offline too.

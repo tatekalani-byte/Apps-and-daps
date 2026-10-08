@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Apps &amp; Daps">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
@@ -30,6 +30,9 @@
       <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
       <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z"/><circle cx="12" cy="13" r="3.2"/></symbol>
       <symbol id="i-image" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9.5" r="1.5"/><path d="m20 15-4.5-4.5L6 20"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3.5M8 7l4-4 4 4M7 11H5.5A1.5 1.5 0 0 0 4 12.5v7A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5H17"/></symbol>
+      <symbol id="i-add-square" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8.5v7M8.5 12h7"/></symbol>
+      <symbol id="i-kebab" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></symbol>
       <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M4 7h3.5c4 0 5 10 9 10H20M4 17h3.5c1.6 0 2.7-1.6 3.6-3.5M14.4 9.5C15.3 8 16.2 7 17.5 7H20M17.5 4.5 20 7l-2.5 2.5M17.5 14.5 20 17l-2.5 2.5"/></symbol>
     </defs>
   </svg>
@@ -318,6 +321,19 @@
       </div>
     </form>
   </dialog>
+
+  <!-- INSTALL: shown when the app is opened in a browser tab instead of from the home screen -->
+  <div id="install" class="install" hidden role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div class="install-card">
+      <img class="install-icon" src="icons/icon-180.png" alt="" width="84" height="84">
+      <h1 id="install-title" class="install-title">Put Apps <em>&amp;</em> Daps on your home screen</h1>
+      <p class="install-copy">It opens full screen like a regular app, works offline, and keeps your closet on your phone.</p>
+      <ol id="install-steps" class="install-steps"></ol>
+      <button type="button" class="btn btn-primary install-go" id="install-btn" hidden>Install app</button>
+      <p id="install-note" class="field-hint install-note"></p>
+      <button type="button" class="link-btn install-skip" id="install-skip">Continue in the browser</button>
+    </div>
+  </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

@@ -1382,6 +1382,76 @@ if (window.APP_DEMO) {
 }
 
 
+/* ───────────── install screen ─────────────
+   Opened in a browser tab instead of from the home screen? Show how to install. */
+const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let installPrompt = null; // Chrome/Edge on Android offer a real install button
+
+function installSteps() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const inApp = /Instagram|FBAN|FBAV|TikTok|Snapchat|Line\/|Pinterest/.test(ua);
+  const share = '<svg class="ico" aria-hidden="true"><use href="#i-share"/></svg>';
+  const kebab = '<svg class="ico" aria-hidden="true"><use href="#i-kebab"/></svg>';
+  const addSq = '<svg class="ico" aria-hidden="true"><use href="#i-add-square"/></svg>';
+  if (inApp) return {
+    steps: [`Tap the ${kebab} or ${share} menu in this app`, `Choose <strong>Open in browser</strong> (or <strong>Open in Safari</strong>)`, "Follow the steps that appear there"],
+    note: "Apps like Instagram open links in their own viewer, which can't install apps.",
+  };
+  if (ios) {
+    const browser = /CriOS/.test(ua) ? "Chrome" : /EdgiOS/.test(ua) ? "Edge" : /FxiOS/.test(ua) ? "Firefox" : "Safari";
+    return {
+      steps: [
+        browser === "Safari"
+          ? `Tap ${share} <strong>Share</strong>. On newer iPhones it's in the <strong>···</strong> menu next to the address bar.`
+          : `Tap ${share} <strong>Share</strong> in the address bar`,
+        `Scroll down and tap ${addSq} <strong>Add to Home Screen</strong>`,
+        "Tap <strong>Add</strong>, then open Apps & Daps from your home screen",
+      ],
+      note: "Add your clothes in the home screen app. iPhone keeps its closet separate from the browser's.",
+    };
+  }
+  if (android) return {
+    steps: [`Tap ${kebab} in the top corner of the browser`, "Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>", "Open Apps & Daps from your home screen"],
+    note: "",
+  };
+  return {
+    steps: ["Open this page on your phone", "Follow the steps shown there to add it to your home screen"],
+    note: location.href,
+  };
+}
+
+function showInstall() {
+  const { steps, note } = installSteps();
+  $("#install-steps").innerHTML = steps.map((s) => `<li><span>${s}</span></li>`).join("");
+  $("#install-steps").hidden = !!installPrompt;
+  $("#install-btn").hidden = !installPrompt;
+  $("#install-note").textContent = installPrompt ? "" : note;
+  $("#install").hidden = false;
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if (!$("#install").hidden) showInstall();
+});
+window.addEventListener("appinstalled", () => { $("#install").hidden = true; });
+$("#install-btn").onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice.catch(() => ({}));
+  installPrompt = null;
+  if (outcome === "accepted") $("#install").hidden = true; else showInstall();
+};
+$("#install-skip").onclick = () => {
+  $("#install").hidden = true;
+  try { sessionStorage.setItem("skipInstall", "1"); } catch {}
+};
+
+const skippedInstall = () => { try { return sessionStorage.getItem("skipInstall") === "1"; } catch { return false; } };
+if (!window.APP_DEMO && !installed() && !skippedInstall()) showInstall();
+
 (async function init() {
   try {
     [state.items, state.outfits] = await Promise.all([idb.all("items"), idb.all("outfits")]);

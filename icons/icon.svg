@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#2a1c17"/>
-  <circle cx="410" cy="110" r="150" fill="#e1a730" opacity=".35"/>
-  <circle cx="90" cy="430" r="170" fill="#c4553a" opacity=".35"/>
-  <path d="M256 128a34 34 0 1 1 34 34c-18 0-34 10-34 28v14l150 92c22 14 12 46-14 46H120c-26 0-36-32-14-46l150-92" fill="none" stroke="#f3e9dc" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="256" y="430" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="84" fill="#e1a730">A&amp;D</text>
+  <defs>
+    <radialGradient id="spot" cx="50%" cy="28%" r="70%">
+      <stop offset="0" stop-color="#2a2932"/><stop offset=".6" stop-color="#141418"/><stop offset="1" stop-color="#0b0b0e"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#spot)"/>
+  <path d="M256 196v-10c0-14 12-20 24-27a34 34 0 1 0-52-29" fill="none" stroke="#d9bb8f" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 196 L392 290c22 15 12 46-14 46H134c-26 0-36-31-14-46Z" fill="none" stroke="#ededef" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
