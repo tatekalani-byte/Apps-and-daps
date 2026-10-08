@@ -64,16 +64,12 @@
 
       <div class="board-wrap">
         <div id="board" class="board">
-          <p id="board-hint" class="board-hint">tap pieces below to pin them here ↓<br><small>drag to move · pinch to resize &amp; twist</small></p>
+          <p id="board-hint" class="board-hint">tap pieces below to put them on ↓<br><small>they snap into place · drag to nudge</small></p>
         </div>
         <div id="piece-tools" class="piece-tools" hidden>
-          <button data-tool="smaller" title="Smaller">−</button>
-          <button data-tool="bigger" title="Bigger">+</button>
-          <button data-tool="ccw" title="Rotate left">↺</button>
-          <button data-tool="cw" title="Rotate right">↻</button>
-          <button data-tool="front" title="Bring to front">⬆</button>
-          <button data-tool="back" title="Send to back">⬇</button>
-          <button data-tool="remove" title="Remove" class="danger">✕</button>
+          <button class="btn btn-ghost btn-sm" data-tool="tuck" id="tool-tuck">Tuck in</button>
+          <button class="btn btn-ghost btn-sm" data-tool="reset" id="tool-reset">Snap back</button>
+          <button class="btn btn-ghost btn-sm danger" data-tool="remove">Take off</button>
         </div>
       </div>
 
@@ -141,6 +137,17 @@
       <div class="field">
         <span>Color</span>
         <div id="f-color" class="swatches" role="radiogroup"></div>
+      </div>
+
+      <div class="field">
+        <span id="f-size-label">Length</span>
+        <div class="size-row">
+          <input id="f-size" type="number" inputmode="decimal" min="0" step="0.5" aria-labelledby="f-size-label">
+          <div id="f-unit" class="unit-toggle" role="radiogroup" aria-label="Unit">
+            <button type="button" role="radio" data-unit="in">in</button><button type="button" role="radio" data-unit="cm">cm</button>
+          </div>
+        </div>
+        <small class="field-hint">Lay it flat and measure, so it's sized right in outfits. Leave it blank to use a typical size.</small>
       </div>
 
       <label class="field">

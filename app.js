@@ -208,7 +208,31 @@ function renderFormPickers() {
     renderFormPickers();
   };
   updateCutActions();
+  renderSizeField();
 }
+
+// Measurements are stored in inches; shown in whichever unit you pick.
+const unit = {
+  get v() { try { return localStorage.getItem("unit") || "in"; } catch { return "in"; } },
+  set v(u) { try { localStorage.setItem("unit", u); } catch {} },
+};
+const fromInches = (n) => Math.round((unit.v === "cm" ? n * 2.54 : n) * 2) / 2;
+const toInches = (n) => (unit.v === "cm" ? n / 2.54 : n);
+function renderSizeField() {
+  const info = SIZE_INFO[form.category];
+  $("#f-size-label").textContent = info.label;
+  $("#f-size").placeholder = `typical: ${fromInches(info.def)}`;
+  document.querySelectorAll("#f-unit button").forEach((b) => b.setAttribute("aria-checked", b.dataset.unit === unit.v));
+}
+$("#f-unit").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.dataset.unit === unit.v) return;
+  const cur = parseFloat($("#f-size").value);
+  const inches = cur ? toInches(cur) : null;
+  unit.v = b.dataset.unit;
+  if (inches) $("#f-size").value = fromInches(inches);
+  renderSizeField();
+};
 
 function updateCutActions() {
   $("#cut-actions").hidden = !form.original;
@@ -238,6 +262,7 @@ function openItemForm(item = null) {
   $("#item-dialog-title").textContent = item ? "Edit piece" : form.queue.length ? `New piece · ${form.queue.length} more after this` : "New piece";
   $("#f-name").value = item?.name ?? "";
   $("#f-tags").value = (item?.tags ?? []).join(", ");
+  $("#f-size").value = item?.size ? fromInches(item.size) : "";
   $("#item-save").textContent = item ? "Save changes" : "Hang it up";
   setPreview(form.blob);
   renderFormPickers();
@@ -308,6 +333,7 @@ $("#item-form").addEventListener("submit", async (e) => {
     category: form.category,
     color: form.color,
     tags: $("#f-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
+    size: parseFloat($("#f-size").value) > 0 ? toInches(parseFloat($("#f-size").value)) : null,
     image: form.blob,
     original: form.original,
     cut: form.cut,
@@ -324,6 +350,7 @@ $("#item-form").addEventListener("submit", async (e) => {
   }
   renderCloset();
   renderDrawer();
+  renderBoard();
   toast(existing ? "Updated ✨" : "Hung up in the closet ✨");
 
   if (form.queue.length) {
@@ -344,7 +371,8 @@ function openDetail(id) {
   $("#d-img").src = imgUrl(i);
   $("#d-img").alt = i.name || i.category;
   $("#d-caption").textContent = i.name || "untitled piece";
-  $("#d-meta").innerHTML = `<span class="dot" style="${dotStyle(i.color)}"></span>${esc(i.category)}${i.color ? " · " + esc(i.color) : ""}`;
+  const sz = i.size ? ` · ${fromInches(i.size)} ${unit.v}` : "";
+  $("#d-meta").innerHTML = `<span class="dot" style="${dotStyle(i.color)}"></span>${esc(i.category)}${i.color ? " · " + esc(i.color) : ""}${sz}`;
   $("#d-tags").innerHTML = (i.tags || []).map((t) => `<span class="tag">#${esc(t)}</span>`).join("");
   const n = state.outfits.filter((o) => o.pieces.some((p) => p.itemId === id)).length;
   $("#d-used").textContent = n ? `styled in ${n} look${n === 1 ? "" : "s"}` : "not styled yet — give it a moment";
@@ -378,70 +406,173 @@ $("#d-delete").onclick = async () => {
 };
 $("#d-style").onclick = () => {
   $("#detail-dialog").close();
-  addToBoard(detailId);
+  if (!state.board.some((p) => p.itemId === detailId)) wear(detailId);
   go("builder");
 };
 
-/* ───────────── outfit builder ───────────── */
+/* ───────────── outfit builder ─────────────
+   Pieces snap onto an invisible figure: tops hang from the shoulders, bottoms start
+   at the waist, shoes stand on the floor, and bags/hats/jewelry are styled alongside.
+   Everything is laid out in real inches so measured pieces keep their true proportions. */
 const board = $("#board");
 
-function pieceHTML(p, i, selectable) {
-  const item = itemById(p.itemId);
-  if (!item) return "";
-  return `<div class="piece${item.cut ? " is-cut" : ""}${selectable && i === state.selected ? " is-selected" : ""}" data-i="${i}"
-    style="left:${p.x}%;top:${p.y}%;width:${p.w}%;z-index:${p.z};transform:translate(-50%,-50%) rotate(${p.r}deg)">
-    <img src="${imgUrl(item)}" alt="${esc(item.name || item.category)}" draggable="false"></div>`;
+const FIG = { w: 55.5, h: 74, shoulder: 12, waist: 28, floor: 73 }; // the board, in inches
+const NUDGE = 4; // how far (inches) you can nudge a piece off its spot
+
+// What to measure per category, and which side of the photo it describes.
+const SIZE_INFO = {
+  Tops: { axis: "h", def: 26, label: "Length · shoulder to hem" },
+  Outerwear: { axis: "h", def: 30, label: "Length · collar to hem" },
+  Dresses: { axis: "h", def: 40, label: "Length · shoulder to hem" },
+  Bottoms: { axis: "h", def: 40, label: "Length · waist to hem" },
+  Shoes: { axis: "long", def: 10, label: "Length · heel to toe" },
+  Bags: { axis: "w", def: 11, label: "Width" },
+  Accessories: { axis: "w", def: 8, label: "Width" },
+  Jewelry: { axis: "w", def: 4, label: "Width" },
+};
+// Layer order, back to front. A tucked-in top drops behind the bottoms.
+const LAYER = { Bottoms: 10, Shoes: 12, Dresses: 15, Tops: 20, Outerwear: 30, Bags: 40, Accessories: 41, Jewelry: 42 };
+const TUCKED = 8;
+// Side spots for extras: [side, top edge in inches]
+const SLOTS = {
+  Accessories: [["L", 2], ["L", 22], ["L", 46]],
+  Jewelry: [["R", 2], ["R", 14], ["R", 24]],
+  Bags: [["R", 38], ["L", 46]],
+};
+// How many of each can be worn at once; adding past that swaps the oldest out.
+const LIMIT = { Tops: 1, Bottoms: 1, Dresses: 1, Outerwear: 1, Shoes: 1, Bags: 1, Accessories: 3, Jewelry: 3 };
+
+function dims(item) {
+  const info = SIZE_INFO[item.category] ?? SIZE_INFO.Accessories;
+  const s = item.size || info.def, r = item.ratio || 0.8;
+  if (info.axis === "h") return { w: s * r, h: s };
+  if (info.axis === "w") return { w: s, h: s / r };
+  // shoes: a pair can be shot side-on or top-down, so scale the long side of the photo
+  const long = s * 1.15;
+  return r >= 1 ? { w: long, h: long / r } : { w: long * r, h: long };
 }
 
-function renderBoard() {
-  board.querySelectorAll(".piece").forEach((n) => n.remove());
-  board.insertAdjacentHTML("beforeend", state.board.map((p, i) => pieceHTML(p, i, true)).join(""));
-  state.board.forEach((p) => { const it = itemById(p.itemId); if (it) alphaMap(it); });
-  $("#board-hint").hidden = state.board.length > 0;
-  $("#piece-tools").hidden = state.selected < 0;
-}
-
-function updatePiece(i) {
-  const p = state.board[i];
-  const el = board.querySelector(`.piece[data-i="${i}"]`);
-  if (!el) return;
-  Object.assign(el.style, {
-    left: p.x + "%", top: p.y + "%", width: p.w + "%", zIndex: p.z,
-    transform: `translate(-50%,-50%) rotate(${p.r}deg)`,
+// Board pieces are {itemId, dx, dy, tuck}; layout turns them into {x, y, w, r, z} in board %.
+function layout(pieces) {
+  const used = {};
+  return pieces.map((p) => {
+    const item = itemById(p.itemId);
+    if (!item) return null;
+    const { w, h } = dims(item);
+    let cx = FIG.w / 2, top;
+    switch (item.category) {
+      case "Tops": case "Dresses": top = FIG.shoulder; break;
+      case "Outerwear": top = FIG.shoulder - 1.5; break;
+      case "Bottoms": top = FIG.waist; break;
+      case "Shoes": top = FIG.floor - h; break;
+      default: {
+        const list = SLOTS[item.category] ?? SLOTS.Accessories;
+        const n = used[item.category] = (used[item.category] ?? -1) + 1;
+        const [side, y] = list[Math.min(n, list.length - 1)];
+        cx = side === "L" ? 1 + w / 2 : FIG.w - 1 - w / 2;
+        top = y;
+      }
+    }
+    return {
+      itemId: p.itemId,
+      x: ((cx + (p.dx || 0)) / FIG.w) * 100,
+      y: ((top + h / 2 + (p.dy || 0)) / FIG.h) * 100,
+      w: (w / FIG.w) * 100,
+      r: 0,
+      z: p.tuck && item.category === "Tops" ? TUCKED : LAYER[item.category] ?? 40,
+    };
   });
 }
 
-const topZ = () => Math.max(0, ...state.board.map((p) => p.z)) + 1;
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-
-const catOf = (p) => itemById(p.itemId)?.category;
-const isBase = (c) => c === "Tops" || c === "Dresses";
-
-function addToBoard(itemId) {
-  const item = itemById(itemId);
-  const jitter = () => (Math.random() - 0.5) * 16;
-  const piece = { itemId, x: 50 + jitter(), y: 50 + jitter(), w: 42, r: (Math.random() - 0.5) * 8, z: topZ() };
-  // Layering: a cut-out jacket goes over the top that's already on the board,
-  // and a top added later slides underneath the jacket.
-  const top = state.board.filter((p) => isBase(catOf(p))).sort((a, b) => b.z - a.z)[0];
-  const jacket = state.board.filter((p) => catOf(p) === "Outerwear" && itemById(p.itemId).cut).sort((a, b) => a.z - b.z)[0];
-  if (item.category === "Outerwear" && item.cut && top) {
-    Object.assign(piece, { x: top.x, y: top.y + 2, w: Math.min(120, top.w * 1.3), r: top.r });
-    toast("Layered over your top 🧥");
-  } else if (isBase(item.category) && jacket) {
-    Object.assign(piece, { x: jacket.x, y: jacket.y - 2, w: jacket.w / 1.3, r: jacket.r, z: jacket.z });
-    jacket.z = topZ() + 1;
-    toast("Tucked under your jacket 🧥");
-  }
-  state.board.push(piece);
-  state.selected = state.board.length - 1;
-  renderBoard();
+function pieceHTML(p, i, selectable) {
+  const item = p && itemById(p.itemId);
+  if (!item) return "";
+  return `<div class="piece${item.cut ? " is-cut" : ""}${selectable && i === state.selected ? " is-selected" : ""}" data-i="${i}"
+    style="left:${p.x}%;top:${p.y}%;width:${p.w}%;z-index:${p.z};transform:translate(-50%,-50%)">
+    <img src="${imgUrl(item)}" alt="${esc(item.name || item.category)}" draggable="false"></div>`;
 }
+
+let placed = [];
+function renderBoard() {
+  state.board = state.board.filter((p) => itemById(p.itemId));
+  if (state.selected >= state.board.length) state.selected = -1;
+  placed = layout(state.board);
+  board.querySelectorAll(".piece").forEach((n) => n.remove());
+  board.insertAdjacentHTML("beforeend", placed.map((p, i) => pieceHTML(p, i, true)).join(""));
+  state.board.forEach((p) => alphaMap(itemById(p.itemId)));
+  $("#board-hint").hidden = state.board.length > 0;
+  renderTools();
+  markDrawer();
+}
+
+// Move pieces in place (no re-render) while nudging.
+function refreshPositions() {
+  placed = layout(state.board);
+  placed.forEach((p, i) => {
+    const el = board.querySelector(`.piece[data-i="${i}"]`);
+    if (el) Object.assign(el.style, { left: p.x + "%", top: p.y + "%", width: p.w + "%", zIndex: p.z });
+  });
+}
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const catOf = (p) => itemById(p.itemId)?.category;
+
+// Put a piece on, swapping out whatever it replaces. Tapping a worn piece takes it off.
+function wear(itemId, { quiet = false } = {}) {
+  const item = itemById(itemId);
+  if (!item) return;
+  const at = state.board.findIndex((p) => p.itemId === itemId);
+  if (at >= 0) {
+    state.board.splice(at, 1);
+    state.selected = -1;
+    renderBoard();
+    return;
+  }
+  const c = item.category;
+  const clashes = (pc) =>
+    (c === "Dresses" && (pc === "Tops" || pc === "Bottoms")) ||
+    ((c === "Tops" || c === "Bottoms") && pc === "Dresses");
+  const out = state.board.filter((p) => clashes(catOf(p)));
+  const same = state.board.filter((p) => catOf(p) === c);
+  out.push(...same.slice(0, Math.max(0, same.length - (LIMIT[c] ?? 1) + 1)));
+  state.board = state.board.filter((p) => !out.includes(p));
+  state.board.push({ itemId, dx: 0, dy: 0, tuck: false });
+  state.selected = -1;
+  renderBoard();
+  if (quiet) return;
+  if (c === "Outerwear" && !item.cut && state.board.some((p) => ["Tops", "Dresses"].includes(catOf(p)))) {
+    toast("Cut out this jacket's inside so your top shows through");
+  } else if (out.length) {
+    const names = out.map((p) => itemById(p.itemId)?.name || catOf(p).toLowerCase());
+    toast(`Swapped out ${names.join(" & ")}`);
+  }
+}
+const addToBoard = (id) => wear(id);
+
+function renderTools() {
+  const p = state.board[state.selected];
+  $("#piece-tools").hidden = !p;
+  if (!p) return;
+  const c = catOf(p);
+  const tuck = $("#tool-tuck");
+  tuck.hidden = !(c === "Tops" && state.board.some((q) => catOf(q) === "Bottoms"));
+  tuck.textContent = p.tuck ? "Untuck" : "Tuck in";
+  $("#tool-reset").disabled = !p.dx && !p.dy;
+}
+
+$("#piece-tools").addEventListener("click", (e) => {
+  const tool = e.target.closest("button")?.dataset.tool;
+  const p = state.board[state.selected];
+  if (!tool || !p) return;
+  if (tool === "tuck") { p.tuck = !p.tuck; refreshPositions(); renderTools(); }
+  if (tool === "reset") { p.dx = p.dy = 0; refreshPositions(); renderTools(); }
+  if (tool === "remove") { state.board.splice(state.selected, 1); state.selected = -1; renderBoard(); }
+});
 
 // Hit-test against actual pixels, so you can grab a shirt through a jacket's cut-out front.
 const alphaMaps = new Map(); // itemId -> {w, h, a}
 function alphaMap(item) {
-  if (!item.cut) return null;
+  if (!item?.cut) return null;
   if (alphaMaps.has(item.id)) return alphaMaps.get(item.id);
   alphaMaps.set(item.id, null);
   const img = new Image();
@@ -461,7 +592,7 @@ function alphaMap(item) {
 }
 
 function pieceAt(clientX, clientY) {
-  const order = state.board.map((p, i) => i).sort((a, b) => state.board[b].z - state.board[a].z);
+  const order = placed.map((p, i) => i).sort((a, b) => placed[b].z - placed[a].z);
   // First look for a piece right under the finger; only then allow a fingertip-sized
   // margin, so a narrow jacket opening still lets you grab the shirt underneath.
   for (const fuzz of [0, 8]) {
@@ -471,19 +602,15 @@ function pieceAt(clientX, clientY) {
 }
 
 function hits(i, clientX, clientY, fuzz) {
-  const p = state.board[i];
   const el = board.querySelector(`.piece[data-i="${i}"]`);
   if (!el) return false;
   const r = el.getBoundingClientRect();
-  const t = (-p.r * Math.PI) / 180;
-  const dx = clientX - (r.left + r.width / 2), dy = clientY - (r.top + r.height / 2);
-  const lx = dx * Math.cos(t) - dy * Math.sin(t) + el.offsetWidth / 2;
-  const ly = dx * Math.sin(t) + dy * Math.cos(t) + el.offsetHeight / 2;
-  if (lx < -fuzz || ly < -fuzz || lx > el.offsetWidth + fuzz || ly > el.offsetHeight + fuzz) return false;
-  const m = alphaMap(itemById(p.itemId));
+  const lx = clientX - r.left, ly = clientY - r.top;
+  if (lx < -fuzz || ly < -fuzz || lx > r.width + fuzz || ly > r.height + fuzz) return false;
+  const m = alphaMap(itemById(state.board[i].itemId));
   if (!m) return true;
-  const ax = Math.floor((lx / el.offsetWidth) * m.w), ay = Math.floor((ly / el.offsetHeight) * m.h);
-  const rad = Math.round((fuzz / el.offsetWidth) * m.w);
+  const ax = Math.floor((lx / r.width) * m.w), ay = Math.floor((ly / r.height) * m.h);
+  const rad = Math.round((fuzz / r.width) * m.w);
   for (let y = Math.max(0, ay - rad); y <= Math.min(m.h - 1, ay + rad); y++) {
     for (let x = Math.max(0, ax - rad); x <= Math.min(m.w - 1, ax + rad); x++) {
       if (m.a[y * m.w + x] > 40) return true;
@@ -503,99 +630,49 @@ function renderDrawer() {
   $("#drawer-strip").innerHTML = list.length
     ? list.map((i) => `<button class="strip-item" data-id="${i.id}" title="${esc(i.name || i.category)}"><img src="${imgUrl(i)}" alt="${esc(i.name || i.category)}" loading="lazy"></button>`).join("")
     : `<p class="strip-empty">add some pieces to your closet first ✿</p>`;
+  markDrawer();
+}
+// Show which pieces are on right now.
+function markDrawer() {
+  const on = new Set(state.board.map((p) => p.itemId));
+  document.querySelectorAll("#drawer-strip .strip-item").forEach((b) => b.classList.toggle("is-on", on.has(b.dataset.id)));
 }
 
 $("#drawer-strip").addEventListener("click", (e) => {
   const b = e.target.closest(".strip-item");
-  if (b) addToBoard(b.dataset.id);
+  if (b) wear(b.dataset.id);
 });
 
-// Drag with one finger, pinch/twist with two.
-const pointers = new Map();
-let gesture = null;
-
+// One finger: select, and nudge a few inches off the spot.
+let drag = null;
 board.addEventListener("pointerdown", (e) => {
-  // a second finger anywhere keeps pinching the piece the first finger grabbed
-  const i = pointers.size && state.selected >= 0 ? state.selected : pieceAt(e.clientX, e.clientY);
-  if (i < 0) {
-    state.selected = -1;
-    renderBoard();
-    return;
-  }
-  if (state.selected !== i) {
-    // Selecting doesn't change layer order — use ⬆ / ⬇ for that, so layering stays put.
+  if (drag) return;
+  const i = pieceAt(e.clientX, e.clientY);
+  if (i !== state.selected) {
     state.selected = i;
     board.querySelectorAll(".piece").forEach((n) => n.classList.toggle("is-selected", +n.dataset.i === i));
-    $("#piece-tools").hidden = false;
+    renderTools();
   }
+  if (i < 0) return;
+  const p = state.board[i];
   board.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  startGesture();
+  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: p.dx || 0, dy: p.dy || 0 };
 });
-
-function startGesture() {
-  const p = state.board[state.selected];
-  if (!p) return;
-  const pts = [...pointers.values()];
-  gesture = { start: { ...p }, pts: pts.map((q) => ({ ...q })) };
-}
-
 board.addEventListener("pointermove", (e) => {
-  if (!pointers.has(e.pointerId) || !gesture) return;
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!drag || e.pointerId !== drag.id) return;
   const p = state.board[state.selected];
   const rect = board.getBoundingClientRect();
-  const now = [...pointers.values()];
-  const was = gesture.pts;
-  const mid = (a) => ({ x: a.reduce((s, q) => s + q.x, 0) / a.length, y: a.reduce((s, q) => s + q.y, 0) / a.length });
-  const m0 = mid(was), m1 = mid(now);
-  p.x = clamp(gesture.start.x + ((m1.x - m0.x) / rect.width) * 100, 0, 100);
-  p.y = clamp(gesture.start.y + ((m1.y - m0.y) / rect.height) * 100, 0, 100);
-  if (now.length >= 2 && was.length >= 2) {
-    const d = (a) => Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y);
-    const ang = (a) => Math.atan2(a[1].y - a[0].y, a[1].x - a[0].x) * 180 / Math.PI;
-    p.w = clamp(gesture.start.w * (d(now) / d(was)), 10, 120);
-    p.r = gesture.start.r + (ang(now) - ang(was));
-  }
-  updatePiece(state.selected);
+  p.dx = clamp(drag.dx + ((e.clientX - drag.x) / rect.width) * FIG.w, -NUDGE, NUDGE);
+  p.dy = clamp(drag.dy + ((e.clientY - drag.y) / rect.height) * FIG.h, -NUDGE, NUDGE);
+  refreshPositions();
 });
-
-const endPointer = (e) => {
-  if (!pointers.delete(e.pointerId)) return;
-  if (pointers.size) startGesture(); else gesture = null;
+const endDrag = (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag = null;
+  renderTools();
 };
-board.addEventListener("pointerup", endPointer);
-board.addEventListener("pointercancel", endPointer);
-
-// Desktop: scroll wheel to resize the selected piece.
-board.addEventListener("wheel", (e) => {
-  const p = state.board[state.selected];
-  if (!p) return;
-  e.preventDefault();
-  p.w = clamp(p.w * (e.deltaY < 0 ? 1.06 : 0.94), 10, 120);
-  updatePiece(state.selected);
-}, { passive: false });
-
-$("#piece-tools").addEventListener("click", (e) => {
-  const tool = e.target.closest("button")?.dataset.tool;
-  const p = state.board[state.selected];
-  if (!tool || !p) return;
-  const zs = state.board.map((q) => q.z);
-  switch (tool) {
-    case "bigger": p.w = clamp(p.w * 1.12, 10, 120); break;
-    case "smaller": p.w = clamp(p.w / 1.12, 10, 120); break;
-    case "cw": p.r += 8; break;
-    case "ccw": p.r -= 8; break;
-    case "front": p.z = Math.max(...zs) + 1; break;
-    case "back": p.z = Math.min(...zs) - 1; break;
-    case "remove":
-      state.board.splice(state.selected, 1);
-      state.selected = -1;
-      renderBoard();
-      return;
-  }
-  updatePiece(state.selected);
-});
+board.addEventListener("pointerup", endDrag);
+board.addEventListener("pointercancel", endDrag);
 
 $("#clear-btn").onclick = async () => {
   if (state.board.length && !(await confirmBox("Clear the board?"))) return;
@@ -605,20 +682,7 @@ $("#clear-btn").onclick = async () => {
   renderBoard();
 };
 
-// Shuffle: pull a random fit from the closet and lay it out like a flat-lay.
-// z = layer order: bottoms, then tops, then jackets on top.
-const LAYOUT = {
-  Bottoms: { x: 50, y: 64, w: 40, r: -2, z: 1 },
-  Tops: { x: 50, y: 29, w: 42, r: 0, z: 2 },
-  Dresses: { x: 50, y: 42, w: 50, r: 0, z: 2 },
-  Outerwear: { x: 50, y: 31, w: 56, r: 0, z: 3 },
-  Shoes: { x: 28, y: 87, w: 30, r: -8, z: 4 },
-  Bags: { x: 81, y: 66, w: 30, r: 8, z: 5 },
-  Accessories: { x: 82, y: 11, w: 24, r: 10, z: 6 },
-  Jewelry: { x: 17, y: 56, w: 20, r: -10, z: 6 },
-};
-// A jacket that hasn't had its inside cut out would hide the top, so it sits off to the side.
-const JACKET_ASIDE = { x: 24, y: 34, w: 42, r: -6, z: 3 };
+// Shuffle: pull a random fit from the closet; it snaps into place like anything else.
 function shuffle() {
   const by = (c) => state.items.filter((i) => i.category === c);
   const pick = (c, chance = 1) => {
@@ -626,18 +690,15 @@ function shuffle() {
     return list.length && Math.random() < chance ? list[Math.floor(Math.random() * list.length)] : null;
   };
   const useDress = by("Dresses").length && (!by("Tops").length || !by("Bottoms").length || Math.random() < 0.35);
+  const jackets = by("Outerwear").filter((j) => j.cut);
   const picks = [
-    ["Outerwear", pick("Outerwear", 0.5)],
-    ...(useDress ? [["Dresses", pick("Dresses")]] : [["Tops", pick("Tops")], ["Bottoms", pick("Bottoms")]]),
-    ["Shoes", pick("Shoes")],
-    ["Bags", pick("Bags", 0.6)],
-    ["Accessories", pick("Accessories", 0.5)],
-    ["Jewelry", pick("Jewelry", 0.5)],
-  ].filter(([, i]) => i);
+    ...(useDress ? [pick("Dresses")] : [pick("Tops"), pick("Bottoms")]),
+    jackets.length && Math.random() < 0.5 ? jackets[Math.floor(Math.random() * jackets.length)] : null,
+    pick("Shoes"), pick("Bags", 0.7), pick("Accessories", 0.5), pick("Jewelry", 0.6),
+  ].filter(Boolean);
   if (!picks.length) { toast("Add a few pieces first, then shuffle 🎲"); return; }
-  state.board = [];
+  state.board = picks.map((i) => ({ itemId: i.id, dx: 0, dy: 0, tuck: false }));
   state.editingOutfit = null;
-  picks.forEach(([cat, item]) => state.board.push({ itemId: item.id, ...(cat === "Outerwear" && !item.cut ? JACKET_ASIDE : LAYOUT[cat]) }));
   state.selected = -1;
   renderBoard();
 }
@@ -662,7 +723,7 @@ $("#save-form").addEventListener("submit", async (e) => {
     id: existing?.id ?? uid(),
     name: $("#o-name").value.trim() || `Look no. ${state.outfits.length + 1}`,
     vibe: saveVibe,
-    pieces: state.board.map((p) => ({ ...p })),
+    pieces: state.board.map(({ itemId, dx, dy, tuck }) => ({ itemId, dx, dy, tuck })),
     createdAt: existing?.createdAt ?? Date.now(),
   };
   await idb.put("outfits", outfit);
@@ -679,7 +740,7 @@ function renderOutfits() {
   $("#outfit-grid").innerHTML = list.map((o) => `
     <div class="look" data-id="${o.id}" role="button" tabindex="0">
       <button class="look-del" data-del="${o.id}" aria-label="Delete look">✕</button>
-      <div class="mini-board">${o.pieces.map((p, i) => pieceHTML(p, i, false)).join("")}</div>
+      <div class="mini-board">${layout(o.pieces).map((p, i) => pieceHTML(p, i, false)).join("")}</div>
       <p class="look-name">${esc(o.name)}</p>
       <span class="look-vibe">${esc(o.vibe)}</span>
     </div>`).join("");
@@ -698,7 +759,8 @@ $("#outfit-grid").addEventListener("click", async (e) => {
   const card = e.target.closest(".look");
   if (!card) return;
   const o = state.outfits.find((x) => x.id === card.dataset.id);
-  state.board = o.pieces.filter((p) => itemById(p.itemId)).map((p) => ({ ...p }));
+  // Older looks stored free positions; they snap into place now.
+  state.board = o.pieces.filter((p) => itemById(p.itemId)).map((p) => ({ itemId: p.itemId, dx: p.dx || 0, dy: p.dy || 0, tuck: !!p.tuck }));
   state.editingOutfit = o.id;
   state.selected = -1;
   go("builder");
