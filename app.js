@@ -230,6 +230,9 @@ $("#f-unit").onclick = (e) => {
 function updateCutActions() {
   const jacket = form.category === "Outerwear";
   $("#cut-actions").hidden = !form.original;
+  const smartBtn = $("#smart-cut-btn");
+  smartBtn.hidden = !form.original || !!form.smart;
+  smartBtn.textContent = AiCut.bgReady() ? "Smart cutout" : `Smart cutout (${AiCut.SIZES.bg} MB, once)`;
   $("#open-front-btn").hidden = !jacket;
   $("#open-front-btn").textContent = form.layer ? "Edit the inside" : "Mark the inside for layering";
   $("#layer-note").hidden = !jacket || !form.original;
@@ -251,6 +254,7 @@ function setPreview(blob) {
 
 function openItemForm(item = null) {
   Object.assign(form, {
+    smart: false,
     id: item?.id ?? null,
     original: item?.original ?? item?.image ?? null,
     blob: item?.image ?? null,
@@ -273,7 +277,7 @@ function openItemForm(item = null) {
 async function takeFile(file) {
   try {
     const { blob, ratio } = await shrink(file);
-    Object.assign(form, { original: blob, blob, cut: null, layer: null, ratio });
+    Object.assign(form, { original: blob, blob, cut: null, layer: null, ratio, smart: false });
     setPreview(blob);
     if (prefs.autoCut) await autoCut();
   } catch (err) {
@@ -287,18 +291,49 @@ async function autoCut() {
   await new Promise((r) => setTimeout(r, 30)); // let "cutting…" paint first
   try {
     const pix = await Cutout.loadPixels(form.original);
-    const mask = Cutout.removeBackground(pix);
+    // Smart cutout (AI) once it's downloaded; the quick color method otherwise, or if it fails.
+    let mask = null, smart = false;
+    if (AiCut.bgReady()) {
+      try { mask = await smartMask(form.original, pix.W, pix.H); smart = !!mask; } catch (err) { console.warn(err); }
+    }
+    mask ??= Cutout.removeBackground(pix);
     const res = mask && await Cutout.render(pix, mask);
     if (res) {
-      Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
+      Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio, smart });
       setPreview(res.blob);
     } else {
-      toast("Couldn't find a plain background. Use Touch up to cut it by hand.");
+      toast(AiCut.bgReady() ? "Couldn't find the piece. Use Touch up to cut it out." : "Couldn't find a plain background. Try Smart cutout.");
     }
   } finally {
     p.classList.remove("is-busy");
   }
 }
+
+// Smart cutout from the add form: downloads the model the first time (with progress).
+$("#smart-cut-btn").onclick = async () => {
+  if (!form.original) return;
+  const btn = $("#smart-cut-btn"), p = $("#photo-preview");
+  btn.disabled = true;
+  p.classList.add("is-busy");
+  try {
+    const pix = await Cutout.loadPixels(form.original);
+    const mask = await smartMask(form.original, pix.W, pix.H, (l, t) => { btn.textContent = `Downloading · ${Math.round((l / t) * 100)}%`; });
+    btn.textContent = "Cutting out…";
+    const res = mask && await Cutout.render(pix, mask);
+    if (res) {
+      Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio, smart: true });
+      setPreview(res.blob);
+      toast("Smart cutout is on. New photos use it automatically.");
+    } else toast("Smart cutout couldn't find a piece in this photo. Use Touch up.");
+  } catch (err) {
+    console.warn(err);
+    toast(navigator.onLine === false ? "You're offline. The first download needs a connection." : "Couldn't load smart cutout. Try again in a moment.");
+  } finally {
+    btn.disabled = false;
+    p.classList.remove("is-busy");
+    updateCutActions();
+  }
+};
 
 $("#auto-cut").checked = prefs.autoCut;
 $("#auto-cut").onchange = (e) => { prefs.autoCut = e.target.checked; };
@@ -926,351 +961,6 @@ document.querySelectorAll("dialog").forEach((d) => {
     if (!inside) { if (d.id === "item-dialog") form.queue = []; d.close(); }
   });
 });
-
-/* ───────────── cutout editor ─────────────
-   Two modes on the same photo:
-   - "bg": the main cutout (background removed), shown everywhere.
-   - "inside": for jackets, what to hide when layering over a top. It starts from the
-     main cutout and can only remove more; the main cutout is never changed by it. */
-const ed = { mode: "bg", pix: null, mask: null, base: null, undo: [], tool: "lasso", pts: [], out: null, tol: 30, size: 28, painting: false, drawing: false, last: null, tap: null, cursor: null };
-const cutCanvas = $("#cut-canvas");
-const hint = (t) => { $("#cut-hint").textContent = t; };
-const HINTS = {
-  bg: {
-    lasso: "Draw around anything you want removed.",
-    wand: "Tap an area of one color to remove it.",
-    erase: "Paint over anything you want removed.",
-    restore: "Paint to bring parts back.",
-  },
-  inside: {
-    lasso: "Draw around the lining or back that shows through the open front. It's hidden only when this is layered over a top.",
-    wand: "Tap the lining to remove it in one go.",
-    erase: "Paint over the inside to remove it.",
-    restore: "Paint to bring parts back.",
-  },
-};
-
-async function openEditor(mode = "bg") {
-  if (!form.original) return;
-  ed.mode = mode;
-  $("#cut-title").textContent = mode === "inside" ? "Mark the inside" : "Touch up";
-  $("#cut-auto").hidden = mode === "inside";
-  $("#cut-front").hidden = mode !== "inside";
-  hint("Loading…");
-  $("#cut-dialog").showModal();
-  ed.pix = await Cutout.loadPixels(form.original);
-  const main = await Cutout.maskFromCut(ed.pix, form.cut ? form.blob : null, form.cut);
-  if (mode === "inside") {
-    ed.base = main;
-    ed.mask = form.layer ? await Cutout.maskFromCut(ed.pix, form.layer.blob, form.layer.cut) : main.slice();
-  } else {
-    ed.base = null;
-    ed.mask = main;
-  }
-  ed.undo = [];
-  ed.pts = [];
-  ed.out = new ImageData(ed.pix.W, ed.pix.H);
-  cutCanvas.width = ed.pix.W;
-  cutCanvas.height = ed.pix.H;
-  ed.cursor = null;
-  setTool("lasso");
-  fitView();
-  draw();
-}
-
-function setTool(t) {
-  ed.tool = t;
-  document.querySelectorAll("#cut-tools button").forEach((c) => c.setAttribute("aria-checked", c.dataset.tool === t));
-  const brushy = t === "erase" || t === "restore";
-  $("#cut-slider").parentElement.hidden = t === "lasso";
-  $("#slider-label").textContent = brushy ? "Brush size" : "Strength";
-  Object.assign($("#cut-slider"), brushy ? { min: 6, max: 90, value: ed.size } : { min: 8, max: 80, value: ed.tol });
-  hint(HINTS[ed.mode][t]);
-}
-$("#cut-tools").onclick = (e) => { const c = e.target.closest("button"); if (c) setTool(c.dataset.tool); };
-$("#cut-slider").oninput = (e) => {
-  if (ed.tool === "erase" || ed.tool === "restore") ed.size = +e.target.value; else ed.tol = +e.target.value;
-};
-
-// In inside mode nothing outside the main cutout can come back.
-function clampToBase() {
-  if (!ed.base) return;
-  const m = ed.mask, b = ed.base;
-  for (let p = 0; p < m.length; p++) if (m[p] > b[p]) m[p] = b[p];
-}
-
-function draw() {
-  const { W, H, data } = ed.pix, o = ed.out.data, m = ed.mask, b = ed.base;
-  for (let p = 0; p < W * H; p++) {
-    let r = data[p * 4], g = data[p * 4 + 1], bl = data[p * 4 + 2], a;
-    if (b && b[p] > 40 && m[p] < b[p] - 40) {
-      // marked as inside: tint it so it's clear what will hide when layering
-      r = r * 0.45 + 217 * 0.55; g = g * 0.45 + 187 * 0.55; bl = bl * 0.45 + 143 * 0.55; a = 150;
-    } else {
-      a = Math.max(m[p], b ? 22 : 38); // removed parts stay faintly visible so you can restore them
-    }
-    o[p * 4] = r; o[p * 4 + 1] = g; o[p * 4 + 2] = bl; o[p * 4 + 3] = a;
-  }
-  const ctx = cutCanvas.getContext("2d");
-  ctx.putImageData(ed.out, 0, 0);
-  const k = W / cutCanvas.getBoundingClientRect().width;
-  if (ed.cursor) {
-    // brush ring, so you can see exactly what a stroke will touch
-    const [cx, cy, r] = ed.cursor;
-    ctx.lineWidth = 1.5 * k;
-    ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.beginPath(); ctx.arc(cx, cy, r + k, 0, 7); ctx.stroke();
-    ctx.strokeStyle = "#ededef"; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
-  }
-  if (ed.pts.length > 1) {
-    ctx.strokeStyle = "#ededef"; ctx.fillStyle = "rgba(217,187,143,.25)"; ctx.lineWidth = 2 * k;
-    ctx.lineJoin = ctx.lineCap = "round";
-    ctx.beginPath();
-    ed.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.fill();
-    ctx.stroke();
-  }
-}
-let rafId = 0;
-const redraw = () => { rafId ||= requestAnimationFrame(() => { rafId = 0; draw(); }); };
-const pushUndo = () => { ed.undo.push(ed.mask.slice()); if (ed.undo.length > 15) ed.undo.shift(); };
-
-function canvasPoint(e) {
-  const r = cutCanvas.getBoundingClientRect();
-  return [((e.clientX - r.left) * ed.pix.W) / r.width, ((e.clientY - r.top) * ed.pix.H) / r.height, ed.pix.W / r.width];
-}
-function paintTo(x, y, k) {
-  const r = (ed.size * k) / 2;
-  const [lx, ly] = ed.last ?? [x, y];
-  const steps = Math.max(1, Math.ceil(Math.hypot(x - lx, y - ly) / (r / 2)));
-  for (let s = 1; s <= steps; s++) {
-    Cutout.brush(ed.mask, ed.pix.W, ed.pix.H, lx + ((x - lx) * s) / steps, ly + ((y - ly) * s) / steps, r, ed.tool === "restore");
-  }
-  if (ed.tool === "restore") clampToBase();
-  ed.last = [x, y];
-  redraw();
-}
-
-/* Zoom and pan: two fingers pinch and drag the view, one finger always edits.
-   The canvas is laid out at "fit" size; the view transform (translate + scale) zooms it.
-   canvasPoint() reads the transformed box, so editing works at any zoom, and the brush
-   keeps its on-screen size (finer strokes when zoomed in). */
-const stage = $("#cut-stage");
-const view = $("#cut-view");
-const zv = { z: 1, x: 0, y: 0, fitW: 0, fitH: 0 }; // zoom, translate (stage px), fitted canvas size
-const MAX_ZOOM = 12;
-
-function fitView() {
-  const sw = stage.clientWidth, sh = stage.clientHeight;
-  const s = Math.min(sw / ed.pix.W, sh / ed.pix.H);
-  zv.fitW = ed.pix.W * s;
-  zv.fitH = ed.pix.H * s;
-  cutCanvas.style.width = zv.fitW + "px";
-  cutCanvas.style.height = zv.fitH + "px";
-  zv.z = 1;
-  zv.x = (sw - zv.fitW) / 2;
-  zv.y = (sh - zv.fitH) / 2;
-  applyView();
-}
-// Keep the picture on screen: centered while it's smaller than the stage, edge-to-edge once bigger.
-function clampView() {
-  const sw = stage.clientWidth, sh = stage.clientHeight;
-  const w = zv.fitW * zv.z, h = zv.fitH * zv.z;
-  zv.x = w <= sw ? (sw - w) / 2 : Math.min(0, Math.max(sw - w, zv.x));
-  zv.y = h <= sh ? (sh - h) / 2 : Math.min(0, Math.max(sh - h, zv.y));
-}
-function applyView() {
-  clampView();
-  view.style.transform = `translate(${zv.x}px, ${zv.y}px) scale(${zv.z})`;
-  // show real pixels when zoomed in close, so edges are easy to see
-  cutCanvas.style.imageRendering = zv.z * (zv.fitW / ed.pix.W) >= 2.5 ? "pixelated" : "auto";
-  $("#zoom-level").textContent = `${Math.round(zv.z * 100)}%`;
-}
-// Zoom to `z`, keeping the point (sx, sy) in stage coordinates fixed under the finger or cursor.
-function zoomAt(z, sx, sy) {
-  z = Math.min(MAX_ZOOM, Math.max(1, z));
-  const px = (sx - zv.x) / zv.z, py = (sy - zv.y) / zv.z;
-  zv.z = z;
-  zv.x = sx - px * z;
-  zv.y = sy - py * z;
-  applyView();
-}
-const stagePoint = (cx, cy) => { const r = stage.getBoundingClientRect(); return [cx - r.left, cy - r.top]; };
-
-$("#zoom-in").onclick = () => zoomAt(zv.z * 1.6, stage.clientWidth / 2, stage.clientHeight / 2);
-$("#zoom-out").onclick = () => zoomAt(zv.z / 1.6, stage.clientWidth / 2, stage.clientHeight / 2);
-$("#zoom-fit").onclick = () => fitView();
-stage.addEventListener("wheel", (e) => {
-  if (!ed.pix) return;
-  e.preventDefault();
-  const [sx, sy] = stagePoint(e.clientX, e.clientY);
-  zoomAt(zv.z * Math.exp(-e.deltaY * 0.0025), sx, sy);
-}, { passive: false });
-// iOS Safari: stop the page itself from pinch-zooming while working in the editor
-for (const t of ["gesturestart", "gesturechange"]) stage.addEventListener(t, (e) => e.preventDefault());
-
-const touches = new Map(); // pointerId -> [clientX, clientY]
-let gesture = null;        // { d, mx, my, z, x, y } at the start of a pinch
-let editing = false;       // a one-finger edit is in progress
-let waitAllUp = false;     // after a pinch, ignore the leftover finger until all are lifted
-
-function pinchInfo() {
-  const [a, b] = [...touches.values()];
-  const [ax, ay] = stagePoint(a[0], a[1]), [bx, by] = stagePoint(b[0], b[1]);
-  return { d: Math.max(1, Math.hypot(bx - ax, by - ay)), mx: (ax + bx) / 2, my: (ay + by) / 2 };
-}
-
-function editStart(e) {
-  const [x, y, k] = canvasPoint(e);
-  editing = true;
-  if (ed.tool === "wand") {
-    ed.tap = { x, y, cx: e.clientX, cy: e.clientY }; // applied on lift, so a pinch can't trigger it
-  } else if (ed.tool === "lasso") {
-    ed.drawing = true;
-    ed.pts = [[x, y]];
-  } else {
-    pushUndo();
-    ed.painting = true;
-    ed.last = null;
-    paintTo(x, y, k);
-  }
-}
-function editMove(e) {
-  const [x, y, k] = canvasPoint(e);
-  if (ed.tool === "erase" || ed.tool === "restore") ed.cursor = [x, y, (ed.size * k) / 2];
-  if (ed.painting) { paintTo(x, y, k); return; }
-  if (ed.drawing) {
-    const [lx, ly] = ed.pts[ed.pts.length - 1];
-    if (Math.hypot(x - lx, y - ly) > 3 * k) { ed.pts.push([x, y]); redraw(); }
-  }
-}
-// A second finger arrived: take back whatever the first finger started.
-function editCancel() {
-  if (ed.painting) { const m = ed.undo.pop(); if (m) ed.mask.set(m); }
-  ed.painting = ed.drawing = false;
-  ed.pts = [];
-  ed.tap = null;
-  ed.last = null;
-  editing = false;
-  redraw();
-}
-function editEnd(e) {
-  editing = false;
-  if (ed.tap) {
-    const t = ed.tap;
-    ed.tap = null;
-    if (Math.hypot(e.clientX - t.cx, e.clientY - t.cy) < 12) {
-      pushUndo();
-      const n = Cutout.wand(ed.pix, ed.mask, t.x, t.y, ed.tol);
-      if (!n) { ed.undo.pop(); hint("That spot is already removed."); }
-      else hint("Removed. Tap more, or raise Strength if it missed some.");
-      redraw();
-    }
-    return;
-  }
-  if (ed.drawing) {
-    ed.drawing = false;
-    if (ed.pts.length > 4) {
-      pushUndo();
-      Cutout.cutPolygon(ed.mask, ed.pix.W, ed.pix.H, ed.pts);
-      hint(ed.mode === "inside" ? "Marked. Draw more, or tap Done." : "Removed. Draw more, or tap Done.");
-    }
-    ed.pts = [];
-    redraw();
-  }
-  ed.painting = false;
-  ed.last = null;
-}
-
-stage.addEventListener("pointerdown", (e) => {
-  if (!ed.pix || e.target.closest(".zoom-controls")) return;
-  stage.setPointerCapture(e.pointerId);
-  touches.set(e.pointerId, [e.clientX, e.clientY]);
-  if (touches.size === 1 && !waitAllUp) editStart(e);
-  else if (touches.size === 2) {
-    if (editing) editCancel();
-    const p = pinchInfo();
-    gesture = { ...p, z: zv.z, x: zv.x, y: zv.y };
-    ed.cursor = null;
-    waitAllUp = true;
-  }
-});
-stage.addEventListener("pointermove", (e) => {
-  if (!ed.pix) return;
-  if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
-  if (gesture && touches.size >= 2) {
-    const p = pinchInfo();
-    const z = Math.min(MAX_ZOOM, Math.max(1, gesture.z * (p.d / gesture.d)));
-    // the picture point that was under the fingers stays under them, so pinch also pans
-    const px = (gesture.mx - gesture.x) / gesture.z, py = (gesture.my - gesture.y) / gesture.z;
-    zv.z = z;
-    zv.x = p.mx - px * z;
-    zv.y = p.my - py * z;
-    applyView();
-    return;
-  }
-  if (editing) editMove(e);
-  else if (!touches.size && e.pointerType === "mouse" && (ed.tool === "erase" || ed.tool === "restore")) {
-    const [x, y, k] = canvasPoint(e);
-    ed.cursor = [x, y, (ed.size * k) / 2];
-    redraw();
-  }
-});
-const pointerUp = (e) => {
-  if (!touches.delete(e.pointerId)) return;
-  if (editing && !waitAllUp) editEnd(e);
-  if (touches.size < 2) gesture = null;
-  if (!touches.size) {
-    waitAllUp = false;
-    if (e.pointerType !== "mouse") { ed.cursor = null; redraw(); }
-  }
-};
-stage.addEventListener("pointerup", pointerUp);
-stage.addEventListener("pointercancel", pointerUp);
-stage.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && !touches.size) { ed.cursor = null; redraw(); } });
-
-$("#cut-auto").onclick = () => {
-  pushUndo();
-  const m = Cutout.removeBackground(ed.pix, ed.tol);
-  if (m) { ed.mask.set(m); hint("Background removed. If it's not quite right, change Strength and try again."); }
-  else { ed.undo.pop(); hint("Couldn't find a plain background. Draw around it instead."); }
-  redraw();
-};
-$("#cut-front").onclick = () => {
-  pushUndo();
-  const r = Cutout.openFront(ed.pix, ed.mask, ed.tol);
-  if (r.ok) hint("Found the inside. Draw to adjust, or tap Done.");
-  else { ed.undo.pop(); setTool("lasso"); hint("Couldn't find the inside automatically. Draw around it instead."); }
-  redraw();
-};
-$("#cut-undo").onclick = () => { const m = ed.undo.pop(); if (m) { ed.mask.set(m); redraw(); } else hint("Nothing to undo."); };
-$("#cut-reset").onclick = () => {
-  pushUndo();
-  if (ed.base) ed.mask.set(ed.base); else ed.mask.fill(255);
-  ed.pts = [];
-  redraw();
-  hint(ed.base ? "Cleared the marked inside." : "Back to the original photo.");
-};
-
-$("#cut-done").onclick = async () => {
-  const { pix, mask } = ed;
-  if (ed.mode === "inside") {
-    let marked = 0, total = 0;
-    for (let p = 0; p < mask.length; p++) { if (ed.base[p] > 128) { total++; if (mask[p] < ed.base[p] - 60) marked++; } }
-    form.layer = marked > total * 0.005 ? await Cutout.render(pix, mask) : null;
-  } else {
-    const res = await Cutout.render(pix, mask);
-    if (res) Object.assign(form, { blob: res.blob, cut: res.cut, ratio: res.ratio });
-    else Object.assign(form, { blob: form.original, cut: null, ratio: pix.W / pix.H });
-    if (form.layer) {
-      // keep the marked inside, trimmed to the new cutout
-      const lm = await Cutout.maskFromCut(pix, form.layer.blob, form.layer.cut);
-      for (let p = 0; p < lm.length; p++) if (lm[p] > mask[p]) lm[p] = mask[p];
-      form.layer = await Cutout.render(pix, lm);
-    }
-  }
-  setPreview(form.blob);
-  $("#cut-dialog").close();
-};
 
 /* ───────────── add from outfit photo ───────────── */
 const NOUNS = { Tops: "top", Bottoms: "bottoms", Dresses: "dress", Outerwear: "jacket", Shoes: "shoes", Bags: "bag", Accessories: "accessory", Jewelry: "jewelry" };

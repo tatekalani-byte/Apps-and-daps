@@ -479,8 +479,49 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); backdrop-filter: blur(4px); }
 /* ───────────────── cutout editor ───────────────── */
 dialog.sheet-tall { max-height: 96dvh; }
 .cut-editor { text-align: left; }
-.cut-head { display: flex; align-items: center; justify-content: space-between; }
-.cut-head .sheet-title { margin: 8px 0; }
+.cut-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 10px; }
+.cut-history { display: flex; gap: 4px; }
+.cut-history .icon-btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cut-history .icon-btn:disabled { opacity: .3; }
+.cut-stage[data-bg="light"] { background: #efeeea; }
+.cut-stage[data-bg="dark"] { background: #0d0d10; }
+.stage-chip {
+  position: absolute; top: 8px; z-index: 2;
+  height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(22, 22, 27, .86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: var(--text); font: 500 12px var(--sans); cursor: pointer;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+.stage-chip.compare { left: 8px; }
+.stage-chip.compare:active { background: var(--text); color: var(--on-light); }
+.stage-chip.backdrop { right: 8px; }
+.cut-busy {
+  position: absolute; inset: 0; z-index: 3;
+  display: grid; place-content: center; gap: 10px; padding: 24px;
+  background: rgba(11, 11, 14, .72); text-align: center; cursor: progress;
+}
+.cut-busy[hidden] { display: none; }
+.cut-busy p { margin: 0; font-size: 13px; color: var(--text); }
+.cut-bar { width: min(240px, 60vw); height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin: 0 auto; }
+.cut-bar[hidden] { display: none; }
+.cut-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.tabs-row { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 4px 0 12px; }
+.tabs-row button { flex: 1; border: 0; background: none; color: var(--muted); padding: 9px 0; font: 500 13px var(--sans); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs-row button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
+.tabs-row button[hidden] { display: none; }
+.cut-panel[hidden] { display: none; }
+.tool-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 0 0 12px; }
+.tool-grid button {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 9px 0 8px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface-2); color: var(--muted); font: 500 11px var(--sans);
+}
+.tool-grid svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tool-grid button[aria-checked="true"] { background: var(--text); border-color: var(--text); color: var(--on-light); }
+#cut-mode[hidden], .slider[hidden], .cut-actions [hidden] { display: none; }
+#cut-heal[aria-pressed="true"] { background: var(--text); color: var(--on-light); }
+.panel-note { margin: -4px 2px 14px; font-size: 12px; color: var(--faint); }
+.hint-btn { margin-left: 6px; vertical-align: middle; }
 .cut-stage {
   position: relative;
   height: min(52dvh, 560px);

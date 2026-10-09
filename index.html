@@ -142,6 +142,7 @@
         </div>
       </div>
       <div id="cut-actions" class="cut-actions" hidden>
+        <button type="button" class="btn btn-ghost btn-sm" id="smart-cut-btn" hidden>Smart cutout</button>
         <button type="button" class="btn btn-ghost btn-sm" id="touch-up">Touch up cutout</button>
         <button type="button" class="btn btn-ghost btn-sm" id="open-front-btn" hidden>Mark the inside for layering</button>
       </div>
@@ -237,33 +238,84 @@
   <dialog id="cut-dialog" class="sheet sheet-tall">
     <div class="detail cut-editor">
       <div class="cut-head">
-        <h2 class="sheet-title" id="cut-title">Touch up</h2>
-        <button class="btn btn-primary btn-sm" id="cut-done">Done</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="cut-cancel">Cancel</button>
+        <div class="cut-history">
+          <button type="button" class="icon-btn" id="cut-undo" aria-label="Undo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+          <button type="button" class="icon-btn" id="cut-redo" aria-label="Redo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="cut-done">Done</button>
       </div>
       <div class="cut-stage" id="cut-stage">
         <div class="cut-view" id="cut-view"><canvas id="cut-canvas"></canvas></div>
+        <button type="button" class="stage-chip compare" id="cut-compare">Hold to compare</button>
+        <button type="button" class="stage-chip backdrop" id="cut-backdrop" aria-label="Change background">Ghost</button>
         <div class="zoom-controls">
           <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
           <span id="zoom-level" class="zoom-level">100%</span>
           <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
           <button type="button" id="zoom-fit" class="zoom-fit">Fit</button>
         </div>
+        <div id="cut-busy" class="cut-busy" hidden><p id="cut-busy-text">Working…</p><div class="cut-bar"><i id="cut-bar"></i></div></div>
       </div>
-      <p class="zoom-tip">Pinch with two fingers to zoom in and move around. One finger edits.</p>
-      <p id="cut-hint" class="cut-hint"></p>
-      <div id="cut-tools" class="segmented" role="radiogroup" aria-label="Tool">
-        <button type="button" role="radio" data-tool="lasso">Draw</button>
-        <button type="button" role="radio" data-tool="wand">Tap</button>
-        <button type="button" role="radio" data-tool="erase">Erase</button>
-        <button type="button" role="radio" data-tool="restore">Restore</button>
+      <p class="zoom-tip">Pinch with two fingers to zoom and move around. One finger edits.</p>
+      <div id="cut-hint" class="cut-hint" aria-live="polite"></div>
+
+      <div id="cut-tabs" class="tabs-row" role="tablist">
+        <button type="button" role="tab" data-panel="cut">Cut</button>
+        <button type="button" role="tab" data-panel="edges">Edges</button>
+        <button type="button" role="tab" data-panel="adjust">Adjust</button>
+        <button type="button" role="tab" data-panel="crop">Crop</button>
       </div>
-      <label class="slider"><span id="slider-label">Strength</span><input id="cut-slider" type="range" min="8" max="80" value="30"></label>
-      <div class="cut-actions">
-        <button type="button" class="btn btn-ghost btn-sm" id="cut-auto">Auto background</button>
-        <button type="button" class="btn btn-ghost btn-sm" id="cut-front">Auto-detect inside</button>
-        <button type="button" class="btn btn-ghost btn-sm" id="cut-undo">Undo</button>
-        <button type="button" class="btn btn-ghost btn-sm" id="cut-reset">Start over</button>
-      </div>
+
+      <section class="cut-panel" data-panel="cut">
+        <div id="cut-mode" class="segmented" role="radiogroup" aria-label="Keep or remove">
+          <button type="button" role="radio" data-keep="0">Remove</button>
+          <button type="button" role="radio" data-keep="1">Keep</button>
+        </div>
+        <div id="cut-tools" class="tool-grid" role="radiogroup" aria-label="Tool">
+          <button type="button" role="radio" data-tool="select"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l12 7-5.5 1.5L9 17z"/><path d="M14 14l5 5"/></svg>Select</button>
+          <button type="button" role="radio" data-tool="lasso"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4c4.4 0 8 2.2 8 5s-3.6 5-8 5-8-2.2-8-5 3.6-5 8-5Z"/><path d="M7 13c-1.5 1.2-1.6 3.4 0 4.3 1.2.7 3 .3 3.6-1.3"/></svg>Draw</button>
+          <button type="button" role="radio" data-tool="brush"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 3.5a2 2 0 0 1 2.8 2.8L11 16.6 7.4 13Z"/><path d="M7 14c-2 0-3 1.5-3 3.5 0 1-1 2-2 2.5 2.5 1 6 .5 7-2"/></svg>Brush</button>
+          <button type="button" role="radio" data-tool="wand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 11-11"/><path d="m14 6 1-3 1 3 3 1-3 1-1 3-1-3-3-1z"/></svg>Color</button>
+          <button type="button" role="radio" data-tool="edge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-1 4-4 6-7s4-5 10-6"/><path d="M4 13c2 0 3-1 4-3" stroke-dasharray="2 2.5"/></svg>Edge</button>
+        </div>
+        <label class="slider" id="cut-slider-wrap"><span id="slider-label">Size</span><input id="cut-slider" type="range" min="6" max="90" value="28"></label>
+        <div class="cut-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="cut-smart">Smart cutout</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="cut-auto">Quick cutout</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="cut-front">Auto-detect inside</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="cut-reset">Start over</button>
+        </div>
+      </section>
+
+      <section class="cut-panel" data-panel="edges" hidden>
+        <label class="slider"><span>Smooth</span><input data-edge="smooth" type="range" min="0" max="8" value="0"></label>
+        <label class="slider"><span>Shrink · Grow</span><input data-edge="grow" type="range" min="-6" max="6" value="0"></label>
+        <label class="slider"><span>Soften</span><input data-edge="soften" type="range" min="0" max="8" value="0"></label>
+        <p class="panel-note">Smooth rounds off jagged edges, Shrink trims a halo of background, and Soften feathers the edge.</p>
+      </section>
+
+      <section class="cut-panel" data-panel="adjust" hidden>
+        <label class="slider"><span>Brightness</span><input data-adj="b" type="range" min="-100" max="100" value="0"></label>
+        <label class="slider"><span>Contrast</span><input data-adj="c" type="range" min="-100" max="100" value="0"></label>
+        <label class="slider"><span>Warmth</span><input data-adj="w" type="range" min="-100" max="100" value="0"></label>
+        <label class="slider"><span>Saturation</span><input data-adj="s" type="range" min="-100" max="100" value="0"></label>
+        <div class="cut-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="cut-heal" aria-pressed="false">Spot fix</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="cut-auto-tone">Auto</button>
+        </div>
+        <label class="slider" id="heal-size-wrap" hidden><span>Spot size</span><input id="heal-size" type="range" min="6" max="80" value="24"></label>
+      </section>
+
+      <section class="cut-panel" data-panel="crop" hidden>
+        <div class="cut-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="rot-left">Rotate left</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="rot-right">Rotate right</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="flip-h">Flip</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="crop-apply" disabled>Crop</button>
+        </div>
+        <label class="slider"><span>Straighten</span><input id="straighten" type="range" min="-15" max="15" step="0.5" value="0"></label>
+      </section>
     </div>
   </dialog>
 
@@ -351,6 +403,8 @@
   <script src="cutout.js"></script>
   <script src="samples.js"></script>
   <script src="outfit-photo.js"></script>
+  <script src="ai-cut.js"></script>
   <script src="app.js"></script>
+  <script src="editor.js"></script>
 </body>
 </html>

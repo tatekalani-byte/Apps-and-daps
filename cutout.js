@@ -167,8 +167,9 @@ const Cutout = (() => {
     return mask;
   }
 
-  /* Magic wand: cut the connected patch of similar color around (x, y). Returns pixels removed. */
-  function wand(pix, mask, x, y, tol = 30) {
+  /* Magic wand: cut the connected patch of similar color around (x, y), or with keep,
+     bring it back. Returns how many pixels changed. */
+  function wand(pix, mask, x, y, tol = 30, keep = false) {
     const { W, H, data } = pix;
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || y < 0 || x >= W || y >= H) return 0;
@@ -182,10 +183,11 @@ const Cutout = (() => {
     r /= n; g /= n; b /= n;
     const region = new Uint8Array(W * H);
     const count = grow(W, H, [y * W + x], (i, from) => {
-      if (mask[i] < 60) return false;
+      if (keep ? mask[i] > 200 : mask[i] < 60) return false;
       const d = cdist(data, i * 4, r, g, b);
       return d < tol || (d < tol * 1.6 && pixDist(data, i * 4, from * 4) < tol * 0.3);
     }, region);
+    if (keep) { for (let p = 0; p < W * H; p++) if (region[p]) mask[p] = 255; return count; }
     for (let p = 0; p < W * H; p++) if (region[p]) mask[p] = 0;
     erode(mask, W, H, region);
     return count;
@@ -245,7 +247,7 @@ const Cutout = (() => {
     }
   }
 
-  function cutPolygon(mask, W, H, pts) {
+  function cutPolygon(mask, W, H, pts, keep = false) {
     const c = document.createElement("canvas");
     c.width = W; c.height = H;
     const ctx = c.getContext("2d", { willReadFrequently: true });
@@ -254,7 +256,9 @@ const Cutout = (() => {
     ctx.closePath();
     ctx.fill();
     const a = ctx.getImageData(0, 0, W, H).data;
-    for (let p = 0; p < W * H; p++) if (a[p * 4 + 3]) mask[p] = Math.min(mask[p], 255 - a[p * 4 + 3]);
+    for (let p = 0; p < W * H; p++) {
+      if (a[p * 4 + 3]) mask[p] = keep ? Math.max(mask[p], a[p * 4 + 3]) : Math.min(mask[p], 255 - a[p * 4 + 3]);
+    }
   }
 
   // Compose photo + mask, crop to the garment, and encode with transparency.
