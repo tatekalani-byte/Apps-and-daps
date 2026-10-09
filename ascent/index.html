@@ -869,7 +869,7 @@
             <button type="button" class="calc-goal-btn" id="dataPasteOpen">Paste data</button>
           </div>
           <textarea id="dataBox" class="data-box" rows="5" spellcheck="false" autocomplete="off" aria-label="Ascent data" hidden></textarea>
-          <button type="button" class="calc-btn" id="dataImport" hidden>Replace my data with this</button>
+          <button type="button" class="calc-btn" id="dataImport" hidden>Add or replace</button>
           <p class="calc-hint data-msg" id="dataMsg" role="status"></p>
         </div>
       </section>
@@ -3208,15 +3208,93 @@
     dataBox.hidden = false;
     dataBox.value = "";
     dataImportBtn.hidden = false;
-    dataImportBtn.textContent = "Replace my data with this";
+    dataImportBtn.textContent = "Add or replace";
     importArmed = false;
-    dataMsg.textContent = "Paste the data you copied, then tap the button.";
+    dataMsg.textContent = "Paste data you copied from another copy of Ascent, or a plan Claude made for you, then tap the button.";
     dataBox.focus();
   });
-  dataBox.addEventListener("input", function(){ importArmed = false; dataImportBtn.textContent = "Replace my data with this"; });
+  dataBox.addEventListener("input", function(){ importArmed = false; dataImportBtn.textContent = "Add or replace"; });
+  // A plan ("ASCENTADD1:{...}") adds goals, habits and appointments to what's already here.
+  function readPlan(text){
+    var m = /^ASCENTADD1:\s*([\s\S]+)$/.exec(text);
+    if(!m) return null;
+    var p; try{ p = JSON.parse(m[1]); }catch(err){ return false; }
+    if(!p || typeof p !== "object") return false;
+    var str = function(v, max){ return typeof v === "string" ? v.trim().slice(0, max) : ""; };
+    var goals = (Array.isArray(p.goals) ? p.goals : []).map(function(g){
+      return { name: str(g && g.name, 80), milestones: (Array.isArray(g && g.milestones) ? g.milestones : []).map(function(x){ return str(x, 120); }).filter(Boolean) };
+    }).filter(function(g){ return g.name; });
+    var habits = (Array.isArray(p.habits) ? p.habits : []).map(function(h){ return str(h, 60); }).filter(Boolean);
+    var events = (Array.isArray(p.events) ? p.events : []).map(function(e){
+      return { title: str(e && e.title, 60), date: str(e && e.date, 10), time: str(e && e.time, 5), notes: str(e && e.notes, 160) };
+    }).filter(function(e){ return e.title && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && (!e.time || /^\d{2}:\d{2}$/.test(e.time)); });
+    return (goals.length || habits.length || events.length) ? { goals:goals, habits:habits, events:events } : false;
+  }
+  // What a plan would add, skipping anything already here (same goal or habit name, same appointment and date).
+  function planChanges(plan){
+    var low = function(s){ return s.toLowerCase(); };
+    var newGoals = 0, newMs = 0;
+    plan.goals.forEach(function(g){
+      var have = state.goals.find(function(x){ return low(x.name) === low(g.name); });
+      if(!have) newGoals++;
+      g.milestones.forEach(function(ms){
+        if(!have || !have.milestones.some(function(x){ return low(x.name) === low(ms); })) newMs++;
+      });
+    });
+    var newHabits = plan.habits.filter(function(h){ return !state.habits.some(function(x){ return low(x.name) === low(h); }); });
+    var newEvents = plan.events.filter(function(e){ return !state.events.some(function(x){ return x.date === e.date && low(x.title) === low(e.title); }); });
+    return { goals:newGoals, milestones:newMs, habits:newHabits.length, events:newEvents.length };
+  }
+  function applyPlan(plan){
+    var low = function(s){ return s.toLowerCase(); };
+    plan.goals.forEach(function(g){
+      var goal = state.goals.find(function(x){ return low(x.name) === low(g.name); });
+      if(!goal){ goal = { id: uid(), name: g.name, milestones: [] }; state.goals.push(goal); }
+      g.milestones.forEach(function(ms){
+        if(!goal.milestones.some(function(x){ return low(x.name) === low(ms); })) goal.milestones.push({ id: uid(), name: ms, done: false });
+      });
+    });
+    plan.habits.forEach(function(h){
+      if(!state.habits.some(function(x){ return low(x.name) === low(h); })) state.habits.push({ id: uid(), name: h, log: {} });
+    });
+    plan.events.forEach(function(e){
+      if(!state.events.some(function(x){ return x.date === e.date && low(x.title) === low(e.title); })) state.events.push({ id: uid(), title: e.title, date: e.date, time: e.time, notes: e.notes });
+    });
+  }
+  var plural = function(n, word){ return n + " " + word + (n === 1 ? "" : "s"); };
+
   dataImportBtn.addEventListener("click", function(){
+    var text = dataBox.value.trim();
+    var plan = readPlan(text);
+    if(plan === false){
+      dataMsg.textContent = "That plan didn't come through whole. Copy it again and paste all of it.";
+      return;
+    }
+    if(plan){
+      var c = planChanges(plan);
+      var parts = [];
+      if(c.goals) parts.push(plural(c.goals, "goal"));
+      if(c.milestones) parts.push(plural(c.milestones, "milestone"));
+      if(c.habits) parts.push(plural(c.habits, "habit"));
+      if(c.events) parts.push(plural(c.events, "appointment"));
+      if(!parts.length){ dataMsg.textContent = "Everything in this plan is already here."; return; }
+      if(!importArmed){
+        importArmed = true;
+        dataImportBtn.textContent = "Tap again to add it";
+        dataMsg.textContent = "Adds " + parts.join(", ") + ". Nothing you already have changes.";
+        return;
+      }
+      withUndo("Plan added: " + parts.join(", "), function(){ applyPlan(plan); });
+      rerender();
+      dataBox.hidden = true;
+      dataBox.value = "";
+      dataImportBtn.hidden = true;
+      importArmed = false;
+      dataMsg.textContent = "";
+      return;
+    }
     var parsed = null;
-    try{ parsed = JSON.parse(dataBox.value.trim().replace(/^ASCENT1:/, "")); }catch(err){}
+    try{ parsed = JSON.parse(text.replace(/^ASCENT1:/, "")); }catch(err){}
     if(!parsed || !Array.isArray(parsed.habits) || !Array.isArray(parsed.goals)){
       dataMsg.textContent = "That doesn't look like Ascent data. Copy it again and paste the whole thing.";
       return;
