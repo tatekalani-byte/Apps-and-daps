@@ -620,6 +620,44 @@
     .ex-sets-input,.ex-reps-input{ width:54px; }
   }
 
+  /* compact goals, due dates, up next, goal editor */
+  .goal-more{ width:30px; height:30px; border-radius:50%; border:none; background:transparent; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .goal-more:hover{ background:var(--line); color:var(--text); }
+  .goal-more svg{ width:18px; height:18px; fill:currentColor; }
+  .goal-next-label{ margin:.6rem 0 0; font-size:.64rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted); }
+  .goal-card .milestones{ margin-top:.35rem; }
+  .goal-toggle{ border:none; background:transparent; color:var(--accent-deep); font-weight:800; font-size:.78rem; padding:.45rem 0 0; cursor:pointer; font-family:inherit; }
+  .goal-done{ margin:.5rem 0 0; font-size:.84rem; color:var(--text-muted); }
+  .ms-due{ flex-shrink:0; font-size:.7rem; font-weight:600; color:var(--text-muted); background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:.1rem .5rem; }
+  .ms-due.soon{ color:var(--accent-deep); border-color:var(--accent); }
+  .ms-due.overdue{ color:var(--danger); border-color:var(--danger); }
+  .ms-add-row .ms-date{ flex:0 0 auto; width:8.6rem; min-width:0; }
+  .up-row{ display:flex; align-items:center; gap:.65rem; background:var(--surface-2); border-radius:14px; padding:.6rem .8rem; }
+  button.up-row{ width:100%; border:none; text-align:left; color:var(--text); cursor:pointer; font-family:inherit; }
+  .up-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:.1rem; }
+  .up-title{ font-size:.9rem; font-weight:600; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow-wrap:anywhere; }
+  .up-sub{ font-size:.72rem; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .up-when{ flex-shrink:0; min-width:3.7rem; font-size:.68rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--accent-deep); }
+  .up-row.done .up-title{ color:var(--text-muted); text-decoration:line-through; text-decoration-color:var(--line); }
+  .cal-dot.due{ border-radius:1px; transform:rotate(45deg); background:var(--accent); }
+  .cal-cell.selected .cal-dot.due{ background:var(--accent-contrast); }
+  .cal-ms{ display:flex; align-items:center; gap:.5rem; padding:.15rem 0; }
+  .cal-ms .ms-check{ width:18px; height:18px; }
+  .cal-ms.done span{ color:var(--text-muted); text-decoration:line-through; }
+  .goal-edit-sheet{ max-height:90%; overflow-y:auto; overscroll-behavior:contain; }
+  .goal-edit-sheet .target-field{ margin-bottom:.9rem; }
+  .goal-edit-sheet .target-field input{ margin:0; }
+  .ge-list{ gap:.5rem; margin-bottom:.4rem; }
+  .ge-row{ background:var(--surface-2); border-radius:12px; padding:.55rem .6rem; display:grid; gap:.45rem; }
+  .ge-row input{ margin:0 !important; background:var(--surface) !important; padding:.45rem .6rem !important; border-radius:8px !important; font-size:.86rem; }
+  .ge-line{ display:flex; align-items:center; gap:.35rem; }
+  .ge-line .ge-date{ flex:1; min-width:0; }
+  .ge-btn{ width:32px; height:32px; flex-shrink:0; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-size:.95rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .ge-btn:disabled{ opacity:.35; cursor:default; }
+  .ge-btn.del{ color:var(--danger); }
+  .ge-row.done .ge-name{ color:var(--text-muted); }
+  .ge-actions{ margin-top:.8rem; }
+
   /* move data between copies */
   .data-hint{ text-align:left; margin-bottom:.7rem; }
   .data-row{ margin:0; }
@@ -669,6 +707,10 @@
           <div id="habitEmpty" class="empty" hidden>
             <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 L19 20 L12 16 L5 20 Z"/></svg>
             <p>No habits yet. Add the first step on your trail.</p>
+          </div>
+          <div id="upNextWrap" hidden>
+            <p class="section-label">Up next</p>
+            <ul id="upNextList"></ul>
           </div>
         </div>
         <div id="todayGoals" hidden>
@@ -839,7 +881,7 @@
           <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
         </div>
         <div class="cal-grid" id="calGrid"></div>
-        <p class="cal-legend">Hollow dot: appointment. Filled dot: habits, workout or food logged.</p>
+        <p class="cal-legend">Hollow dot: appointment. Diamond: milestone due. Filled dot: habits, workout or food logged.</p>
         <div class="cal-detail">
           <p class="section-label" id="calDetailLabel">Today</p>
           <div id="calDetailBody"></div>
@@ -1099,6 +1141,23 @@
       </div>
     </div>
 
+    <div class="sheet-overlay" id="goalEditOverlay">
+      <div class="sheet goal-edit-sheet">
+        <div class="lib-head">
+          <h3>Edit goal</h3>
+          <button type="button" class="lib-done" id="goalEditSave">Save</button>
+        </div>
+        <label class="target-field">Goal<input type="text" id="goalEditName" maxlength="80" autocomplete="off"></label>
+        <p class="section-label">Milestones</p>
+        <ul class="ge-list" id="goalEditList"></ul>
+        <button type="button" class="browse-btn" id="goalEditAdd">+ Add milestone</button>
+        <div class="sheet-actions ge-actions">
+          <button type="button" class="btn-delete" id="goalEditDelete">Delete goal</button>
+          <button type="button" class="btn-cancel" id="goalEditCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div class="sheet-overlay" id="eventOverlay">
       <div class="sheet event-sheet">
         <h3 id="eventHead">New appointment</h3>
@@ -1166,6 +1225,10 @@
               e.qty = 1;
               e.serving = e.serving || "";
             }
+          });
+          // milestones from before due dates: pick up a date written in the name ("Progress photos: Nov 12")
+          parsed.goals.forEach(function(g){
+            (g.milestones || []).forEach(function(m){ if(m.due === undefined) m.due = dueFromText(m.name); });
           });
           if(!parsed.coach || !Array.isArray(parsed.coach.thread)) parsed.coach = { thread: [] };
           if(!Array.isArray(parsed.events)) parsed.events = [];
@@ -1307,6 +1370,52 @@
     }).join("");
   }
 
+  // ---- goals: compact cards, due dates ----
+  var expandedGoals = {};
+  var CHECK_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4"/></svg>';
+
+  // "Progress photos: Nov 12" -> the next Nov 12 (a date more than a month back means next year)
+  function dueFromText(text){
+    var MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    var m = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?!\d)/i.exec(String(text || ""));
+    if(!m) return "";
+    var mon = MONTHS.indexOf(m[1].toLowerCase()), day = Number(m[2]), now = new Date();
+    var d = new Date(now.getFullYear(), mon, day);
+    if(d.getMonth() !== mon) return "";
+    if(d < addDays(now, -30)) d = new Date(now.getFullYear() + 1, mon, day);
+    return dateKey(d);
+  }
+  function daysUntil(key){ return -daysSince(keyToDate(key).getTime()); }
+  function fmtDue(key){
+    var n = daysUntil(key);
+    if(n === 0) return "Today";
+    if(n === 1) return "Tomorrow";
+    var d = keyToDate(key), opts = { month:"short", day:"numeric" };
+    if(d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString(undefined, opts);
+  }
+  function dueClass(m){
+    if(!m.due || m.done) return "";
+    var n = daysUntil(m.due);
+    return n < 0 ? " overdue" : n <= 3 ? " soon" : "";
+  }
+  // open milestones first (dated ones by date, then undated in your order), finished ones last
+  function orderedMilestones(g){
+    var open = g.milestones.filter(function(m){ return !m.done; });
+    var dated = open.filter(function(m){ return m.due; }).sort(function(a, b){ return a.due.localeCompare(b.due); });
+    var undated = open.filter(function(m){ return !m.due; });
+    return dated.concat(undated, g.milestones.filter(function(m){ return m.done; }));
+  }
+  function nextMilestone(g){ return orderedMilestones(g).find(function(m){ return !m.done; }) || null; }
+
+  function milestoneRow(g, m){
+    return '<li class="milestone' + (m.done ? ' done' : '') + '" data-gid="' + g.id + '" data-mid="' + m.id + '">' +
+      '<button class="ms-check" aria-pressed="' + m.done + '" data-action="toggle-milestone" aria-label="Mark ' + escapeHtml(m.name) + ' done">' + CHECK_SVG + '</button>' +
+      '<span class="milestone-name">' + escapeHtml(m.name) + '</span>' +
+      (m.due ? '<span class="ms-due num' + dueClass(m) + '">' + escapeHtml(fmtDue(m.due)) + '</span>' : '') +
+    '</li>';
+  }
+
   function renderGoals(){
     var list = document.getElementById("goalList");
     var empty = document.getElementById("goalEmpty");
@@ -1320,19 +1429,25 @@
       var total = g.milestones.length;
       var done = g.milestones.filter(function(m){ return m.done; }).length;
       var pct = total ? (done/total*100) : 0;
-      var msHtml = g.milestones.map(function(m){
-        return '<li class="milestone' + (m.done ? ' done' : '') + '" data-gid="' + g.id + '" data-mid="' + m.id + '">' +
-          '<button class="ms-check" aria-pressed="' + m.done + '" data-action="toggle-milestone">' +
-            '<svg viewBox="0 0 16 16" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4"/></svg>' +
-          '</button>' +
-          '<span class="milestone-name">' + escapeHtml(m.name) + '</span>' +
-          '<button class="row-del" data-action="delete-milestone" aria-label="Remove milestone">&times;</button>' +
-        '</li>';
-      }).join("");
+      var open = !!expandedGoals[g.id];
+      var next = nextMilestone(g);
+      var body = "";
+      if(open){
+        body = '<ul class="milestones">' + orderedMilestones(g).map(function(m){ return milestoneRow(g, m); }).join("") +
+          '<li class="ms-add-row"><input type="text" placeholder="Add milestone" maxlength="80" class="ms-input" aria-label="New milestone">' +
+          '<input type="date" class="ms-date" aria-label="Due date (optional)">' +
+          '<button type="button" data-action="add-milestone" aria-label="Add milestone">+</button></li>' +
+        '</ul>';
+      } else if(next){
+        body = '<p class="goal-next-label">Next</p><ul class="milestones">' + milestoneRow(g, next) + '</ul>';
+      } else if(total){
+        body = '<p class="goal-done">Every milestone done. Summit reached.</p>';
+      }
+      var toggle = open ? "Show less" : !total ? "Add milestones" : "Show all " + total;
       return '<li class="goal-card" data-id="' + g.id + '">' +
         '<div class="goal-head">' +
           '<span class="goal-name">' + escapeHtml(g.name) + '</span>' +
-          '<button class="row-del" data-action="delete-goal" aria-label="Remove goal">&times;</button>' +
+          '<button class="goal-more" data-action="edit-goal" aria-label="Edit ' + escapeHtml(g.name) + '"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>' +
         '</div>' +
         '<div class="goal-meta">' +
           '<div class="goal-track"><div class="goal-fill" style="width:' + pct + '%"></div>' +
@@ -1340,13 +1455,148 @@
           '</div>' +
           '<span class="goal-frac num">' + done + '/' + total + '</span>' +
         '</div>' +
-        '<ul class="milestones">' + msHtml +
-          '<li class="ms-add-row"><input type="text" placeholder="Add milestone" maxlength="60" data-gid="' + g.id + '" class="ms-input">' +
-          '<button type="button" data-action="add-milestone" data-gid="' + g.id + '">+</button></li>' +
-        '</ul>' +
+        body +
+        '<button type="button" class="goal-toggle" data-action="toggle-goal">' + toggle + '</button>' +
       '</li>';
     }).join("");
   }
+
+  // Checking off is the main tap now, so finishing one offers an undo.
+  function toggleMilestone(gid, mid){
+    var goal = state.goals.find(function(g){ return g.id === gid; });
+    var ms = goal && goal.milestones.find(function(m){ return m.id === mid; });
+    if(!ms) return;
+    if(ms.done){ ms.done = false; saveState(); }
+    else withUndo("Done: " + ms.name, function(){ ms.done = true; });
+    renderGoals();
+    renderUpNext();
+    if(activeTab === "calendar") renderCalendar();
+  }
+
+  // ---- today: up next (this week's plans + the next step of each goal) ----
+  function renderUpNext(){
+    var wrap = document.getElementById("upNextWrap");
+    var today = dateKey(), weekEnd = dateKey(addDays(new Date(), 6));
+    var plans = state.events.filter(function(ev){ return ev.date >= today && ev.date <= weekEnd; })
+      .sort(function(a, b){ return (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")); }).slice(0, 4);
+    var steps = state.goals.map(function(g){ return { g:g, m:nextMilestone(g) }; }).filter(function(x){ return x.m; });
+    steps.sort(function(a, b){
+      if(a.m.due && b.m.due) return a.m.due.localeCompare(b.m.due);
+      return a.m.due ? -1 : b.m.due ? 1 : 0;
+    });
+    steps = steps.slice(0, 6);
+    if(!plans.length && !steps.length){ wrap.hidden = true; return; }
+    wrap.hidden = false;
+    var dayLabel = function(key){
+      var n = daysUntil(key);
+      return n === 0 ? "Today" : n === 1 ? "Tomorrow" : keyToDate(key).toLocaleDateString(undefined, { weekday:"short" });
+    };
+    document.getElementById("upNextList").innerHTML =
+      plans.map(function(ev){
+        return '<li><button type="button" class="up-row" data-date="' + ev.date + '">' +
+          '<span class="up-when">' + escapeHtml(dayLabel(ev.date)) + '</span>' +
+          '<span class="up-main"><span class="up-title">' + escapeHtml(ev.title) + '</span>' +
+            (ev.time || ev.notes ? '<span class="up-sub">' + escapeHtml([ev.time ? fmtEventTime(ev.time) : "", ev.notes || ""].filter(Boolean).join(" · ")) + '</span>' : '') +
+          '</span></button></li>';
+      }).join("") +
+      steps.map(function(x){
+        return '<li class="up-row" data-gid="' + x.g.id + '" data-mid="' + x.m.id + '">' +
+          '<button class="ms-check" aria-pressed="false" data-action="toggle-milestone" aria-label="Mark ' + escapeHtml(x.m.name) + ' done">' + CHECK_SVG + '</button>' +
+          '<span class="up-main"><span class="up-title">' + escapeHtml(x.m.name) + '</span><span class="up-sub">' + escapeHtml(x.g.name) + '</span></span>' +
+          (x.m.due ? '<span class="ms-due num' + dueClass(x.m) + '">' + escapeHtml(fmtDue(x.m.due)) + '</span>' : '') +
+        '</li>';
+      }).join("");
+  }
+
+  document.getElementById("upNextList").addEventListener("click", function(e){
+    var check = e.target.closest('[data-action="toggle-milestone"]');
+    if(check){ var row = check.closest("[data-mid]"); toggleMilestone(row.dataset.gid, row.dataset.mid); return; }
+    var plan = e.target.closest("[data-date]");
+    if(plan){
+      calSelectedKey = plan.dataset.date;
+      var d = keyToDate(calSelectedKey);
+      calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+      document.querySelector('.tab[data-tab="calendar"]').click();
+    }
+  });
+
+  // ---- goal editor: rename, dates, reorder, delete ----
+  var goalEditOverlay = document.getElementById("goalEditOverlay");
+  var goalDraft = null;
+
+  function renderGoalEditor(){
+    var n = goalDraft.milestones.length;
+    document.getElementById("goalEditList").innerHTML = goalDraft.milestones.map(function(m, i){
+      return '<li class="ge-row' + (m.done ? ' done' : '') + '" data-i="' + i + '">' +
+        '<input type="text" class="ge-name" value="' + escapeHtml(m.name) + '" maxlength="80" aria-label="Milestone name" autocomplete="off">' +
+        '<div class="ge-line">' +
+          '<input type="date" class="ge-date" value="' + (m.due || "") + '" aria-label="Due date">' +
+          '<button type="button" class="ge-btn" data-move="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>&uarr;</button>' +
+          '<button type="button" class="ge-btn" data-move="1" aria-label="Move down"' + (i === n - 1 ? ' disabled' : '') + '>&darr;</button>' +
+          '<button type="button" class="ge-btn del" data-del aria-label="Delete milestone">&times;</button>' +
+        '</div>' +
+      '</li>';
+    }).join("") || '<li class="lib-hint">No milestones yet.</li>';
+  }
+  function openGoalEditor(gid){
+    var goal = state.goals.find(function(g){ return g.id === gid; });
+    if(!goal) return;
+    goalDraft = JSON.parse(JSON.stringify(goal));
+    document.getElementById("goalEditName").value = goalDraft.name;
+    renderGoalEditor();
+    goalEditOverlay.querySelector(".goal-edit-sheet").scrollTop = 0;
+    goalEditOverlay.classList.add("open");
+  }
+  function closeGoalEditor(){ goalEditOverlay.classList.remove("open"); goalDraft = null; resetShellScroll(); }
+
+  document.getElementById("goalEditList").addEventListener("input", function(e){
+    var row = e.target.closest(".ge-row");
+    if(!row) return;
+    var m = goalDraft.milestones[Number(row.dataset.i)];
+    if(e.target.classList.contains("ge-name")) m.name = e.target.value;
+    if(e.target.classList.contains("ge-date")) m.due = e.target.value;
+  });
+  document.getElementById("goalEditList").addEventListener("click", function(e){
+    var btn = e.target.closest("button");
+    var row = btn && btn.closest(".ge-row");
+    if(!row) return;
+    var i = Number(row.dataset.i), list = goalDraft.milestones;
+    if(btn.hasAttribute("data-del")) list.splice(i, 1);
+    else if(btn.dataset.move){
+      var j = i + Number(btn.dataset.move);
+      if(j < 0 || j >= list.length) return;
+      var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    }
+    renderGoalEditor();
+  });
+  document.getElementById("goalEditAdd").addEventListener("click", function(){
+    goalDraft.milestones.push({ id: uid(), name: "", done: false, due: "" });
+    renderGoalEditor();
+    var inputs = document.querySelectorAll("#goalEditList .ge-name");
+    if(inputs.length) inputs[inputs.length - 1].focus();
+  });
+  document.getElementById("goalEditSave").addEventListener("click", function(){
+    var name = document.getElementById("goalEditName").value.trim();
+    if(!name){ showToast("Give the goal a name"); return; }
+    var draft = goalDraft;
+    draft.name = name;
+    draft.milestones = draft.milestones
+      .map(function(m){ m.name = String(m.name || "").trim(); if(!m.due && m.due !== "") m.due = ""; return m; })
+      .filter(function(m){ return m.name; });
+    withUndo("Goal saved", function(){
+      state.goals = state.goals.map(function(g){ return g.id === draft.id ? draft : g; });
+    });
+    closeGoalEditor();
+    rerender();
+  });
+  document.getElementById("goalEditDelete").addEventListener("click", function(){
+    var id = goalDraft.id;
+    withUndo("Goal removed", function(){ state.goals = state.goals.filter(function(g){ return g.id !== id; }); });
+    closeGoalEditor();
+    rerender();
+  });
+  document.getElementById("goalEditCancel").addEventListener("click", closeGoalEditor);
+  goalEditOverlay.addEventListener("click", function(e){ if(e.target === goalEditOverlay) closeGoalEditor(); });
 
   function renderStats(){
     var days = [];
@@ -1398,6 +1648,7 @@
     renderHeader();
     renderHabits();
     renderGoals();
+    renderUpNext();
     renderStats();
   }
 
@@ -1532,27 +1783,27 @@
     var card = btn.closest(".goal-card");
     var gid = card.dataset.id;
     var goal = state.goals.find(function(g){ return g.id === gid; });
-    if(btn.dataset.action === "delete-goal"){
-      withUndo("Goal removed", function(){ state.goals = state.goals.filter(function(g){ return g.id !== gid; }); });
-      renderGoals(); return;
+    var action = btn.dataset.action;
+    if(action === "toggle-goal"){
+      expandedGoals[gid] = !expandedGoals[gid];
+      renderGoals();
+      if(expandedGoals[gid] && !goal.milestones.length){ var inp = card.ownerDocument.querySelector('.goal-card[data-id="' + gid + '"] .ms-input'); if(inp) inp.focus(); }
+      return;
     }
-    if(btn.dataset.action === "toggle-milestone"){
-      var mRow = btn.closest(".milestone");
-      var ms = goal.milestones.find(function(m){ return m.id === mRow.dataset.mid; });
-      ms.done = !ms.done;
-      saveState(); renderGoals(); return;
+    if(action === "edit-goal"){ openGoalEditor(gid); return; }
+    if(action === "toggle-milestone"){
+      toggleMilestone(gid, btn.closest(".milestone").dataset.mid);
+      return;
     }
-    if(btn.dataset.action === "delete-milestone"){
-      var mRow2 = btn.closest(".milestone");
-      goal.milestones = goal.milestones.filter(function(m){ return m.id !== mRow2.dataset.mid; });
-      saveState(); renderGoals(); return;
-    }
-    if(btn.dataset.action === "add-milestone"){
+    if(action === "add-milestone"){
       var input = card.querySelector(".ms-input");
+      var dateInput = card.querySelector(".ms-date");
       var name = input.value.trim();
       if(!name) return;
-      goal.milestones.push({ id: uid(), name: name, done: false });
-      saveState(); renderGoals();
+      goal.milestones.push({ id: uid(), name: name, done: false, due: (dateInput && dateInput.value) || dueFromText(name) });
+      saveState(); renderGoals(); renderUpNext();
+      var again = document.querySelector('.goal-card[data-id="' + gid + '"] .ms-input');
+      if(again) again.focus();
     }
   });
 
@@ -2654,8 +2905,10 @@
       var hasWorkout = state.gym.history.some(function(h){ return dateKey(new Date(h.date)) === key; });
       var hasFood = state.food.entries.some(function(e){ return e.date === key; });
       var hasEvent = state.events.some(function(ev){ return ev.date === key; });
+      var hasDue = state.goals.some(function(g){ return g.milestones.some(function(m){ return !m.done && m.due === key; }); });
       var dotList = [];
       if(hasEvent) dotList.push('<span class="cal-dot event"></span>');
+      if(hasDue) dotList.push('<span class="cal-dot due"></span>');
       [hasHabit, hasWorkout, hasFood].filter(Boolean).forEach(function(){ dotList.push('<span class="cal-dot"></span>'); });
       var dots = '<span class="cal-dots">' + dotList.join("") + '</span>';
       var classes = "cal-cell" + (c.otherMonth ? " other-month" : "") + (key === todayKey ? " today" : "") + (key === calSelectedKey ? " selected" : "");
@@ -2761,6 +3014,8 @@
 
   document.getElementById("calDetailBody").addEventListener("click", function(e){
     if(e.target.closest('[data-action="add-event"]')){ openEventSheet(calSelectedKey); return; }
+    var msCheck = e.target.closest('[data-action="toggle-milestone"]');
+    if(msCheck){ var r = msCheck.closest("[data-mid]"); toggleMilestone(r.dataset.gid, r.dataset.mid); return; }
     var row = e.target.closest("[data-eid]");
     if(!row) return;
     var ev = state.events.find(function(x){ return x.id === row.dataset.eid; });
@@ -2827,8 +3082,17 @@
     }).join("") || '<span class="cal-detail-empty">Nothing planned</span>';
     plansHtml += '<button type="button" class="ev-add" data-action="add-event">+ Add appointment</button>';
 
+    var dueHere = [];
+    state.goals.forEach(function(g){ g.milestones.forEach(function(m){ if(m.due === key) dueHere.push({ g:g, m:m }); }); });
+    var dueHtml = dueHere.length ? dueHere.map(function(x){
+      return '<div class="cal-ms' + (x.m.done ? ' done' : '') + '" data-gid="' + x.g.id + '" data-mid="' + x.m.id + '">' +
+        '<button class="ms-check" aria-pressed="' + x.m.done + '" data-action="toggle-milestone" aria-label="Mark ' + escapeHtml(x.m.name) + ' done">' + CHECK_SVG + '</button>' +
+        '<span>' + escapeHtml(x.m.name) + '</span></div>';
+    }).join("") : "";
+
     document.getElementById("calDetailBody").innerHTML =
       '<div class="cal-detail-row"><span class="cal-detail-label">Plans</span><div class="cal-detail-value">' + plansHtml + '</div></div>' +
+      (dueHtml ? '<div class="cal-detail-row"><span class="cal-detail-label">Due</span><div class="cal-detail-value">' + dueHtml + '</div></div>' : '') +
       '<div class="cal-detail-row"><span class="cal-detail-label">Habits</span><div class="cal-detail-value">' + habitsHtml + '</div></div>' +
       '<div class="cal-detail-row"><span class="cal-detail-label">Workout</span><div class="cal-detail-value">' + workoutHtml + '</div></div>' +
       '<div class="cal-detail-row"><span class="cal-detail-label">Food</span><div class="cal-detail-value">' + foodHtml + '</div></div>';
@@ -2954,10 +3218,21 @@
       }
     }
 
+    var dueSoon = [];
+    state.goals.forEach(function(g){ g.milestones.forEach(function(m){ if(!m.done && m.due && daysUntil(m.due) <= 3) dueSoon.push({ g:g, m:m }); }); });
+    dueSoon.sort(function(a, b){ return a.m.due.localeCompare(b.m.due); });
+    if(dueSoon.length){
+      var ds0 = dueSoon[0], dn = daysUntil(ds0.m.due);
+      out.push({ tag:"Goals", text: dn < 0
+        ? "“" + ds0.m.name + "” was due " + fmtDue(ds0.m.due) + ". Do it today, or give it a new date."
+        : "“" + ds0.m.name + "” is due " + (dn === 0 ? "today" : dn === 1 ? "tomorrow" : fmtDue(ds0.m.due)) + "." + (dueSoon.length > 1 ? " " + (dueSoon.length - 1) + " more due soon." : ""),
+        pri: dn <= 0 ? 0 : 1, action:{ label:"Open goals", goals:true } });
+    }
+
     var open = state.goals.filter(function(g){ return g.milestones.length && g.milestones.some(function(m){ return !m.done; }); })
       .map(function(g){
         var d = g.milestones.filter(function(m){ return m.done; }).length;
-        return { g:g, pct:d / g.milestones.length, next:g.milestones.find(function(m){ return !m.done; }) };
+        return { g:g, pct:d / g.milestones.length, next:nextMilestone(g) };
       })
       .sort(function(a, b){ return b.pct - a.pct; })[0];
     if(open) out.push({ tag:"Goals", text:"“" + open.g.name + "” is " + Math.round(open.pct * 100) + "% there. Next up: " + open.next.name + ".", pri:3 });
@@ -2999,7 +3274,10 @@
     if(!b) return;
     var a = coachInsightCache[Number(b.dataset.idx)].action;
     closeCoach();
-    if(a.muscle){
+    if(a.goals){
+      document.querySelector('.tab[data-tab="today"]').click();
+      document.querySelector('.seg-btn[data-sub="goals"]').click();
+    } else if(a.muscle){
       document.querySelector('.tab[data-tab="gym"]').click();
       openLibrarySheet(null, { explore:true, filter:a.muscle });
     } else if(a.tab){
@@ -3043,8 +3321,8 @@
     if(!state.goals.length) L.push("- none yet");
     state.goals.forEach(function(g){
       var d = g.milestones.filter(function(m){ return m.done; }).length;
-      var next = g.milestones.find(function(m){ return !m.done; });
-      L.push("- " + g.name + ": " + d + "/" + g.milestones.length + " milestones" + (next ? ", next: " + next.name : ""));
+      var next = nextMilestone(g);
+      L.push("- " + g.name + ": " + d + "/" + g.milestones.length + " milestones" + (next ? ", next: " + next.name + (next.due ? " (due " + next.due + ")" : "") : ""));
     });
     L.push("PLANNED WORKOUT DAYS: " + (state.gym.days.map(function(d){ return d.name + " (" + d.exercises.length + (d.exercises.length === 1 ? " exercise)" : " exercises)"); }).join(", ") || "none yet"));
     L.push("RECENT WORKOUTS (newest first):");
@@ -3228,7 +3506,11 @@
     if(!p || typeof p !== "object") return false;
     var str = function(v, max){ return typeof v === "string" ? v.trim().slice(0, max) : ""; };
     var goals = (Array.isArray(p.goals) ? p.goals : []).map(function(g){
-      return { name: str(g && g.name, 80), milestones: (Array.isArray(g && g.milestones) ? g.milestones : []).map(function(x){ return str(x, 120); }).filter(Boolean) };
+      return { name: str(g && g.name, 80), milestones: (Array.isArray(g && g.milestones) ? g.milestones : []).map(function(x){
+        var name = str(typeof x === "string" ? x : x && x.name, 120);
+        var due = x && typeof x === "object" && /^\d{4}-\d{2}-\d{2}$/.test(x.due || "") ? x.due : dueFromText(name);
+        return name ? { name:name, due:due } : null;
+      }).filter(Boolean) };
     }).filter(function(g){ return g.name; });
     var habits = (Array.isArray(p.habits) ? p.habits : []).map(function(h){ return str(h, 60); }).filter(Boolean);
     var events = (Array.isArray(p.events) ? p.events : []).map(function(e){
@@ -3244,7 +3526,7 @@
       var have = state.goals.find(function(x){ return low(x.name) === low(g.name); });
       if(!have) newGoals++;
       g.milestones.forEach(function(ms){
-        if(!have || !have.milestones.some(function(x){ return low(x.name) === low(ms); })) newMs++;
+        if(!have || !have.milestones.some(function(x){ return low(x.name) === low(ms.name); })) newMs++;
       });
     });
     var newHabits = plan.habits.filter(function(h){ return !state.habits.some(function(x){ return low(x.name) === low(h); }); });
@@ -3257,7 +3539,7 @@
       var goal = state.goals.find(function(x){ return low(x.name) === low(g.name); });
       if(!goal){ goal = { id: uid(), name: g.name, milestones: [] }; state.goals.push(goal); }
       g.milestones.forEach(function(ms){
-        if(!goal.milestones.some(function(x){ return low(x.name) === low(ms); })) goal.milestones.push({ id: uid(), name: ms, done: false });
+        if(!goal.milestones.some(function(x){ return low(x.name) === low(ms.name); })) goal.milestones.push({ id: uid(), name: ms.name, done: false, due: ms.due });
       });
     });
     plan.habits.forEach(function(h){
