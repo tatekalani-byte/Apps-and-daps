@@ -21,6 +21,7 @@
 <!-- /standalone-only -->
 </head>
 <body>
+<!-- standalone-only --><script>window.ASCENT_STANDALONE = true;</script><!-- /standalone-only -->
 <!-- Muscle map anatomy paths adapted from "Body Muscles" by Ivan Vulović (https://github.com/vulovix/body-muscles), Apache License 2.0. Recolored and restyled for this app; no changes to the underlying path data. -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -658,6 +659,29 @@
   .ge-row.done .ge-name{ color:var(--text-muted); }
   .ge-actions{ margin-top:.8rem; }
 
+  /* smarter food logging */
+  .food-tools{ display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:.45rem; margin-bottom:.7rem; }
+  .food-tool{ display:flex; flex-direction:column; align-items:center; gap:.3rem; border:1px solid var(--line); background:var(--surface-2); color:var(--text); border-radius:12px; padding:.65rem .4rem; font-size:.76rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .food-tool svg{ width:22px; height:22px; fill:none; stroke:var(--accent-deep); stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .food-tool:active{ transform:scale(.97); }
+  .food-tool-msg{ margin:-.2rem 0 .7rem; font-size:.8rem; color:var(--text-muted); }
+  .food-tools[hidden], .food-tool[hidden], .food-tool-msg[hidden], .meal-panel [hidden], .meal-panel[hidden], #foodOnlineWrap [hidden], #foodOnlineWrap[hidden]{ display:none; }
+  .meal-panel{ background:var(--surface-2); border:1px solid var(--accent); border-radius:14px; padding:.75rem; margin-bottom:.8rem; }
+  .meal-top{ display:flex; gap:.6rem; align-items:center; }
+  .meal-thumb{ width:64px; height:64px; object-fit:cover; border-radius:10px; flex-shrink:0; }
+  .meal-top input{ flex:1; min-width:0; margin:0 !important; background:var(--surface) !important; }
+  .meal-actions{ display:flex; justify-content:flex-end; gap:.4rem; margin-top:.6rem; }
+  .meal-status{ text-align:left; margin:.55rem 0 .2rem; }
+  .meal-items{ margin-top:.4rem; }
+  .meal-item{ display:flex; align-items:center; gap:.55rem; background:var(--surface); border-radius:12px; padding:.5rem .6rem; }
+  .meal-item.off .lib-item-main{ opacity:.45; }
+  .meal-keep{ width:18px !important; height:18px; margin:0 !important; flex-shrink:0; accent-color:var(--accent); }
+  #mealAdd{ margin-top:.6rem; }
+  #mealAdd:disabled{ opacity:.5; }
+  .food-online{ margin-bottom:.9rem; }
+  .food-online .browse-btn{ margin-top:0; }
+  .food-online .browse-btn:disabled{ opacity:.6; }
+
   /* move data between copies */
   .data-hint{ text-align:left; margin-bottom:.7rem; }
   .data-row{ margin:0; }
@@ -1082,12 +1106,39 @@
           <h3>Add food</h3>
           <button type="button" class="lib-done" id="foodDone">Done</button>
         </div>
+        <div class="food-tools" id="foodTools" hidden>
+          <button type="button" class="food-tool" id="mealSnapBtn" hidden><svg viewBox="0 0 24 24"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Snap your meal</span></button>
+          <button type="button" class="food-tool" id="mealDescribeBtn" hidden><svg viewBox="0 0 24 24"><path d="M5 19h4L19.5 8.5a2.1 2.1 0 0 0-3-3L6 16v3ZM14.5 7.5l2 2"/></svg><span>Describe a meal</span></button>
+          <button type="button" class="food-tool" id="barcodeBtn" hidden><svg viewBox="0 0 24 24"><path d="M4 7V5h3M17 5h3v2M20 17v2h-3M7 19H4v-2M7 9v6M10 9v6M13 9v6M16 9v6"/></svg><span>Scan barcode</span></button>
+        </div>
+        <p class="food-tool-msg" id="foodToolMsg" role="status" hidden></p>
+        <div class="meal-panel" id="mealPanel" hidden>
+          <div class="meal-top">
+            <img id="mealThumb" class="meal-thumb" alt="Your meal" hidden>
+            <input type="text" id="mealNote" maxlength="200" autocomplete="off">
+          </div>
+          <div class="meal-actions">
+            <button type="button" class="btn-cancel-sm" id="mealCancel">Cancel</button>
+            <button type="button" class="btn-cancel-sm" id="mealStop" hidden>Stop</button>
+            <button type="button" class="btn-save-sm" id="mealEstimate">Estimate</button>
+          </div>
+          <p class="calc-hint meal-status" id="mealStatus" role="status"></p>
+          <ul class="lib-list meal-items" id="mealItems"></ul>
+          <button type="button" class="calc-btn" id="mealAdd" hidden>Add foods</button>
+        </div>
+        <input type="file" id="mealFile" accept="image/*" capture="environment" hidden>
+        <input type="file" id="barcodeFile" accept="image/*" capture="environment" hidden>
         <input type="text" class="lib-search" id="foodLibSearch" placeholder="Search foods" autocomplete="off">
         <div id="foodRecentsWrap" hidden>
           <p class="section-label">Recent</p>
           <div class="chip-row" id="foodRecents"></div>
         </div>
         <ul class="lib-list food-lib-list" id="foodLibList"></ul>
+        <div id="foodOnlineWrap" class="food-online" hidden>
+          <button type="button" class="browse-btn" id="foodOnlineBtn"></button>
+          <p class="section-label" id="foodOnlineLabel" hidden>Online · Open Food Facts</p>
+          <ul class="lib-list food-lib-list" id="foodOnlineList"></ul>
+        </div>
         <div class="food-pick" id="foodPick" hidden>
           <div class="pick-top"><span class="pick-name" id="pickName"></span><span class="pick-sub" id="pickSub"></span></div>
           <div class="pick-row">
@@ -2644,6 +2695,7 @@
 
   document.getElementById("foodLibSearch").addEventListener("input", function(e){
     foodLibSearch = e.target.value;
+    if(typeof renderOnline === "function") renderOnline();
     renderFoodRecents();
     renderFoodLibList();
   });
@@ -2780,6 +2832,11 @@
     document.getElementById("foodCustom").open = false;
   }
   function openFoodSheet(){
+    closeMealPanel();
+    toolMsg("");
+    onlineQuery = ""; onlineFoods = [];
+    updateFoodTools();
+    setTimeout(renderOnline, 0);
     resetCustomFood();
     foodLibSearch = "";
     document.getElementById("foodLibSearch").value = "";
@@ -3293,6 +3350,7 @@
       if(window.claude && typeof window.claude.use === "function") sampleFn = await window.claude.use("sample");
     }catch(err){ sampleFn = null; }
     if(coachOverlay.classList.contains("open")) renderCoachAi();
+    updateFoodTools();
   })();
 
   var COACH_RULES =
@@ -3605,6 +3663,280 @@
     dataMsg.textContent = "";
     showToast("Your data is here now");
   });
+
+  // ---- smarter food logging ----
+  // Home screen app: barcode scan and online search (Open Food Facts, free, no account).
+  // Claude version: snap or describe a meal and Claude estimates it. (Pages inside Claude
+  // can't reach other websites, and the home screen app has no Claude, hence the split.)
+  var ONLINE = !!window.ASCENT_STANDALONE;
+  var OFF = window.APP_OFF_HOST || "https://world.openfoodfacts.org";
+  var OFF_FIELDS = "code,product_name,generic_name,brands,serving_size,nutriments";
+  var foodToolMsg = document.getElementById("foodToolMsg");
+  function toolMsg(text){ foodToolMsg.textContent = text || ""; foodToolMsg.hidden = !text; }
+
+  async function updateFoodTools(){
+    var canSee = false;
+    if(sampleFn && typeof sampleFn.limits === "function"){
+      try{ canSee = !!(await sampleFn.limits()).images; }catch(err){}
+    }
+    document.getElementById("mealSnapBtn").hidden = !canSee;
+    document.getElementById("mealDescribeBtn").hidden = !sampleFn;
+    document.getElementById("barcodeBtn").hidden = !ONLINE;
+    document.getElementById("foodTools").hidden = !canSee && !sampleFn && !ONLINE;
+  }
+
+  // An Open Food Facts product as a food you can pick: per serving when the label gives it, else per 100 g.
+  function offFood(p){
+    if(!p) return null;
+    var n = p.nutriments || {};
+    var num = function(v){ v = Number(v); return isFinite(v) && v >= 0 ? v : null; };
+    var kcalOf = function(sfx){
+      var k = num(n["energy-kcal" + sfx]);
+      if(k == null && num(n["energy" + sfx]) != null) k = num(n["energy" + sfx]) / 4.184; // kJ
+      return k;
+    };
+    var perServing = kcalOf("_serving") != null && p.serving_size;
+    var sfx = perServing ? "_serving" : "_100g";
+    var kcal = kcalOf(sfx);
+    var name = String(p.product_name || p.generic_name || "").trim();
+    if(kcal == null || !name) return null;
+    var brand = String(p.brands || "").split(",")[0].trim();
+    var g = function(key){ return Math.round((num(n[key + sfx]) || 0) * 10) / 10; };
+    return {
+      libId: "off:" + String(p.code || ""),
+      name: brand && name.toLowerCase().indexOf(brand.toLowerCase()) === -1 ? name + ", " + brand : name,
+      serving: perServing ? String(p.serving_size) : "100 g",
+      unit: { calories: Math.round(kcal), protein: g("proteins"), carbs: g("carbohydrates"), fat: g("fat") }
+    };
+  }
+  async function offFetch(path){
+    var ctl = new AbortController();
+    var timer = setTimeout(function(){ ctl.abort(); }, 15000);
+    try{
+      var res = await fetch(OFF + path, { signal: ctl.signal });
+      if(!res.ok) throw new Error("http " + res.status);
+      return await res.json();
+    } finally { clearTimeout(timer); }
+  }
+
+  // online search: on a tap (Open Food Facts asks apps not to search on every keystroke)
+  var onlineQuery = "", onlineFoods = [];
+  function renderOnline(){
+    var q = foodLibSearch.trim();
+    var wrap = document.getElementById("foodOnlineWrap");
+    if(!ONLINE || !q){ wrap.hidden = true; return; }
+    wrap.hidden = false;
+    var btn = document.getElementById("foodOnlineBtn");
+    btn.hidden = onlineQuery === q;
+    btn.textContent = "Search online for “" + q + "”";
+    var list = document.getElementById("foodOnlineList");
+    if(onlineQuery !== q){ list.innerHTML = ""; document.getElementById("foodOnlineLabel").hidden = true; return; }
+    document.getElementById("foodOnlineLabel").hidden = false;
+    list.innerHTML = onlineFoods.length ? onlineFoods.map(function(f, i){
+      var picked = foodSel && foodSel.libId === f.libId;
+      return '<li class="lib-item' + (picked ? " picked" : "") + '" data-i="' + i + '"><div class="lib-item-main">' +
+        '<span class="lib-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="lib-tag">' + escapeHtml(f.serving) + ' &middot; ' + f.unit.calories + ' cal &middot; ' + f.unit.protein + 'p / ' + f.unit.carbs + 'c / ' + f.unit.fat + 'f</span>' +
+      '</div></li>';
+    }).join("") : '<li class="lib-hint">Nothing online for that either. Use Custom food below.</li>';
+  }
+  document.getElementById("foodOnlineBtn").addEventListener("click", async function(){
+    var q = foodLibSearch.trim();
+    if(!q) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = "Searching…";
+    try{
+      var j = await offFetch("/cgi/search.pl?search_terms=" + encodeURIComponent(q) + "&search_simple=1&action=process&json=1&page_size=24&fields=" + OFF_FIELDS);
+      onlineFoods = (Array.isArray(j.products) ? j.products : []).map(offFood).filter(Boolean).slice(0, 20);
+      onlineQuery = q;
+    }catch(err){
+      toolMsg(navigator.onLine === false ? "You're offline. Online search needs a connection." : "Couldn't reach the online food database. Try again in a moment.");
+    }finally{
+      btn.disabled = false;
+      if(foodLibSearch.trim() === q) renderOnline();
+    }
+  });
+  document.getElementById("foodOnlineList").addEventListener("click", function(e){
+    var row = e.target.closest(".lib-item");
+    if(!row) return;
+    var f = onlineFoods[Number(row.dataset.i)];
+    if(f) selectFood({ libId:f.libId, name:f.name, serving:f.serving, unit:f.unit }, lastQtyFor(f.libId));
+    renderOnline();
+  });
+
+  // barcode: read it from a photo, then look the product up
+  var barcodeReader = null;
+  function getBarcodeReader(){
+    if(barcodeReader) return barcodeReader;
+    var formats = ["ean_13", "ean_8", "upc_a", "upc_e"];
+    barcodeReader = (async function(){
+      if("BarcodeDetector" in window){
+        try{
+          var have = await window.BarcodeDetector.getSupportedFormats();
+          if(have.indexOf("ean_13") !== -1) return new window.BarcodeDetector({ formats: formats });
+        }catch(err){}
+      }
+      // iPhone Safari has no built-in reader: use the open-source ZXing one
+      var mod = await import(window.APP_BARCODE_URL || "https://cdn.jsdelivr.net/npm/barcode-detector@3.0.8/dist/es/ponyfill.js");
+      if(window.APP_ZXING_WASM) mod.setZXingModuleOverrides({ locateFile: function(path, prefix){ return /\.wasm$/.test(path) ? window.APP_ZXING_WASM : prefix + path; } });
+      return new mod.BarcodeDetector({ formats: formats });
+    })().catch(function(err){ barcodeReader = null; throw err; });
+    return barcodeReader;
+  }
+  document.getElementById("barcodeBtn").addEventListener("click", function(){ document.getElementById("barcodeFile").click(); });
+  document.getElementById("barcodeFile").addEventListener("change", async function(e){
+    var file = e.target.files[0];
+    e.target.value = "";
+    if(!file) return;
+    toolMsg("Reading the barcode…");
+    var code = null;
+    try{
+      var reader = await getBarcodeReader();
+      var bmp = await createImageBitmap(file);
+      var found = await reader.detect(bmp);
+      code = found && found.length ? String(found[0].rawValue).replace(/\D/g, "") : null;
+    }catch(err){
+      toolMsg(navigator.onLine === false ? "You're offline. Scanning needs a connection the first time." : "Couldn't start the barcode reader. Try again.");
+      return;
+    }
+    if(!code){ toolMsg("Couldn't find a barcode. Take it closer, so the barcode fills most of the photo."); return; }
+    toolMsg("Looking up " + code + "…");
+    try{
+      var j = await offFetch("/api/v2/product/" + code + ".json?fields=" + OFF_FIELDS);
+      var f = j && j.status === 1 ? offFood(Object.assign({ code: code }, j.product)) : null;
+      if(!f){ toolMsg("Barcode " + code + " isn't in the food database yet. Add it under Custom food."); return; }
+      toolMsg("");
+      selectFood({ libId:f.libId, name:f.name, serving:f.serving, unit:f.unit }, lastQtyFor(f.libId));
+    }catch(err){
+      toolMsg(navigator.onLine === false ? "You're offline. Looking up a barcode needs a connection." : "Couldn't reach the food database. Try again in a moment.");
+    }
+  });
+
+  // snap or describe a meal: Claude estimates each food and its portion
+  var mealPhoto = null, mealItems = [], mealCtl = null, mealThumbUrl = null;
+  function openMealPanel(withPhoto){
+    document.getElementById("mealPanel").hidden = false;
+    document.getElementById("mealThumb").hidden = !withPhoto;
+    document.getElementById("mealNote").placeholder = withPhoto ? "Anything to add? e.g. 2 eggs, cooked in butter" : "What did you eat? e.g. chipotle bowl, double chicken, no rice";
+    mealItems = [];
+    renderMealItems();
+    document.getElementById("mealStatus").textContent = withPhoto ? "Add a note if it helps, then tap Estimate." : "";
+    toolMsg("");
+    scrollWithin(foodSheetOverlay.querySelector(".food-sheet"), document.getElementById("mealPanel"), false);
+  }
+  function closeMealPanel(){
+    if(mealCtl) mealCtl.abort();
+    document.getElementById("mealPanel").hidden = true;
+    mealPhoto = null;
+    mealItems = [];
+    document.getElementById("mealNote").value = "";
+    if(mealThumbUrl){ URL.revokeObjectURL(mealThumbUrl); mealThumbUrl = null; }
+  }
+  document.getElementById("mealSnapBtn").addEventListener("click", function(){ document.getElementById("mealFile").click(); });
+  document.getElementById("mealDescribeBtn").addEventListener("click", function(){
+    mealPhoto = null;
+    openMealPanel(false);
+    document.getElementById("mealNote").focus();
+  });
+  document.getElementById("mealFile").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    e.target.value = "";
+    if(!file) return;
+    mealPhoto = file;
+    if(mealThumbUrl) URL.revokeObjectURL(mealThumbUrl);
+    mealThumbUrl = URL.createObjectURL(file);
+    document.getElementById("mealThumb").src = mealThumbUrl;
+    openMealPanel(true);
+  });
+  document.getElementById("mealCancel").addEventListener("click", closeMealPanel);
+
+  function renderMealItems(){
+    var list = document.getElementById("mealItems");
+    list.innerHTML = mealItems.map(function(it, i){
+      var t = scaleUnit(it.unit, it.qty);
+      return '<li class="meal-item' + (it.keep ? "" : " off") + '" data-i="' + i + '">' +
+        '<input type="checkbox" class="meal-keep" aria-label="Include ' + escapeHtml(it.name) + '"' + (it.keep ? " checked" : "") + '>' +
+        '<div class="lib-item-main"><span class="lib-name">' + escapeHtml(it.name) + '</span>' +
+        '<span class="lib-tag num">' + escapeHtml(it.serving) + ' &middot; ' + t.calories + ' cal &middot; ' + t.protein + 'p ' + t.carbs + 'c ' + t.fat + 'f</span></div>' +
+        '<div class="food-qty"><button type="button" data-step="-1" aria-label="Less">&minus;</button><span class="num">' + fmtQty(it.qty) + '</span><button type="button" data-step="1" aria-label="More">+</button></div>' +
+      '</li>';
+    }).join("");
+    var kept = mealItems.filter(function(it){ return it.keep; });
+    var add = document.getElementById("mealAdd");
+    add.hidden = !mealItems.length;
+    add.disabled = !kept.length;
+    var cal = kept.reduce(function(s, it){ return s + scaleUnit(it.unit, it.qty).calories; }, 0);
+    add.textContent = kept.length ? "Add " + kept.length + (kept.length === 1 ? " food" : " foods") + " · " + cal + " cal" : "Add foods";
+  }
+  document.getElementById("mealItems").addEventListener("click", function(e){
+    var row = e.target.closest(".meal-item");
+    if(!row) return;
+    var it = mealItems[Number(row.dataset.i)];
+    var step = e.target.closest("[data-step]");
+    if(step){ it.qty = Math.max(0.5, Math.round((it.qty + Number(step.dataset.step) * 0.5) * 100) / 100); renderMealItems(); }
+  });
+  document.getElementById("mealItems").addEventListener("change", function(e){
+    if(!e.target.classList.contains("meal-keep")) return;
+    mealItems[Number(e.target.closest(".meal-item").dataset.i)].keep = e.target.checked;
+    renderMealItems();
+  });
+
+  document.getElementById("mealEstimate").addEventListener("click", async function(){
+    var note = document.getElementById("mealNote").value.trim();
+    if(!mealPhoto && !note){ document.getElementById("mealStatus").textContent = "Describe what you ate first."; return; }
+    if(!sampleFn || mealCtl) return;
+    var status = document.getElementById("mealStatus");
+    var est = this, stop = document.getElementById("mealStop");
+    est.disabled = true; stop.hidden = false;
+    status.textContent = mealPhoto ? "Looking at your meal…" : "Estimating…";
+    mealCtl = new AbortController();
+    var prompt =
+      "Estimate the nutrition of a meal" + (mealPhoto ? " from the photo" : "") + "." +
+      (note ? " The person says: \"" + note.replace(/"/g, "'") + "\"." : "") +
+      " List each distinct food or drink" + (mealPhoto ? " you can see" : " they describe") +
+      ", estimate the portion, and give calories, protein, carbs and fat in grams for that portion, using typical USDA values." +
+      " Use US units for portions (oz, cups, tbsp, slices, pieces). Single numbers, no ranges." +
+      ' Reply with only JSON like {"items":[{"name":"Grilled chicken breast","serving":"5 oz","calories":230,"protein":43,"carbs":0,"fat":5}],"note":"one short sentence on anything you were unsure about"}.' +
+      ' If there is no food, reply {"items":[],"note":"why"}.';
+    try{
+      var out = await sampleFn.json(prompt, { images: mealPhoto ? [mealPhoto] : undefined, modelTier: "default", signal: mealCtl.signal });
+      var clean = function(v, max){ v = Number(v); return isFinite(v) && v >= 0 ? Math.min(v, max) : 0; };
+      mealItems = (out && Array.isArray(out.items) ? out.items : []).filter(function(x){ return x && x.name; }).slice(0, 12).map(function(x){
+        return { name: String(x.name).slice(0, 60), serving: String(x.serving || "1 portion").slice(0, 30), qty: 1, keep: true,
+          unit: { calories: Math.round(clean(x.calories, 4000)), protein: Math.round(clean(x.protein, 400) * 10) / 10, carbs: Math.round(clean(x.carbs, 600) * 10) / 10, fat: Math.round(clean(x.fat, 300) * 10) / 10 } };
+      });
+      var why = out && out.note ? String(out.note).slice(0, 200) : "";
+      status.textContent = mealItems.length
+        ? "Estimates can be off, especially portions. Adjust amounts or untick anything that's wrong." + (why ? " " + why : "")
+        : (why || "Couldn't find any food there. Try another photo or describe it.");
+      renderMealItems();
+    }catch(err){
+      var code = err && err.code;
+      if(code === "cancelled") status.textContent = "";
+      else if(code === "images_unavailable"){ status.textContent = "Photos aren't available here. Describe the meal instead."; updateFoodTools(); }
+      else if(code === "not_granted" || code === "sampling_disabled"){ status.textContent = "Claude isn't available for this page."; sampleFn = null; updateFoodTools(); }
+      else if(code === "invalid_json") status.textContent = "That estimate didn't come back right. Tap Estimate to try again.";
+      else status.textContent = coachErrorCopy(code);
+    }finally{
+      mealCtl = null;
+      est.disabled = false; stop.hidden = true;
+      est.textContent = "Estimate again";
+    }
+  });
+  document.getElementById("mealStop").addEventListener("click", function(){ if(mealCtl) mealCtl.abort(); });
+  document.getElementById("mealAdd").addEventListener("click", function(){
+    var kept = mealItems.filter(function(it){ return it.keep; });
+    if(!kept.length) return;
+    withUndo("Added " + kept.length + (kept.length === 1 ? " food" : " foods"), function(){
+      kept.forEach(function(it){ addFoodEntry({ libId:null, name:it.name, serving:it.serving, unit:it.unit }, it.qty); });
+    });
+    closeMealPanel();
+    renderFoodLog();
+    renderFoodRecents();
+    document.getElementById("mealEstimate").textContent = "Estimate";
+  });
+  updateFoodTools();
 
   renderCoachCard();
   renderAll();

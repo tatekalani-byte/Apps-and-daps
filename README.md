@@ -33,5 +33,9 @@ To use it on your phone, host it anywhere static. For example, turn on **GitHub 
 ## Ascent
 `ascent/` is a second app in this repo: a habits, goals, gym, food and calendar tracker, served at `/ascent/` with its own home screen icon, install screen and offline cache. Its data lives only on the device. **Stats → Your data** copies everything as text and pastes it into another copy (for example, from the Claude version into the home screen app). The AI coach chat uses Claude and only appears in the Claude version; the built-in coaching works everywhere.
 
+Food logging has two smart helpers, one per version:
+- **Home screen app**: **Scan barcode** (take a photo of a package's barcode) and **Search online** under the food search. Both use [Open Food Facts](https://world.openfoodfacts.org), a free food database with millions of packaged products. Results use the label's serving size when it has one, otherwise 100 g.
+- **Claude version**: **Snap your meal** or **Describe a meal**. Claude lists each food with an estimated portion and macros. You can change amounts or untick items before adding them. These are estimates, and portions are the hardest part to get right.
+
 `python3 scripts/build_ascent_artifact.py out.html` makes the Claude version from `ascent/index.html` by removing the parts marked `standalone-only`.
 
