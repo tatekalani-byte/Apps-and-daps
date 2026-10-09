@@ -14,7 +14,7 @@ fonts = re.search(r'<link href="https://fonts.googleapis.com[^>]+>', head).group
 body = re.sub(r'\s*<script src="[^"]+"></script>', "", body)
 scripts = "".join(f"\n<script>\n{(root / f).read_text()}\n</script>" for f in ["cutout.js", "samples.js", "outfit-photo.js", "app.js"])
 
-Path(sys.argv[1]).write_text(f"""<title>Apps &amp; Daps</title>
+Path(sys.argv[1]).write_text(f"""<title>My Closet</title>
 <meta name="description" content="Snap your clothes, scroll your closet, style your outfits.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

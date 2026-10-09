@@ -46,21 +46,27 @@ const Cutout = (() => {
   // k-means over the photo's border to learn what "background" looks like.
   function borderColors(pix, k = 3) {
     const { W, H, data } = pix;
-    const s = [];
+    const s = [], side = []; // side: 0 top, 1 bottom, 2 left, 3 right
     const step = Math.max(1, Math.round((W + H) / 400));
-    for (let x = 0; x < W; x += step) s.push((x) * 4, ((H - 1) * W + x) * 4);
-    for (let y = 0; y < H; y += step) s.push((y * W) * 4, (y * W + W - 1) * 4);
+    for (let x = 0; x < W; x += step) { s.push((x) * 4, ((H - 1) * W + x) * 4); side.push(0, 1); }
+    for (let y = 0; y < H; y += step) { s.push((y * W) * 4, (y * W + W - 1) * 4); side.push(2, 3); }
+    const perSide = [0, 0, 0, 0];
+    side.forEach((n) => perSide[n]++);
     let centers = [0, Math.floor(s.length / 3), Math.floor((2 * s.length) / 3)].slice(0, k)
       .map((n) => [data[s[n]], data[s[n] + 1], data[s[n] + 2]]);
     for (let it = 0; it < 8; it++) {
-      const acc = centers.map(() => [0, 0, 0, 0]);
-      for (const i of s) {
+      const acc = centers.map(() => [0, 0, 0, 0, [0, 0, 0, 0]]);
+      s.forEach((i, j) => {
         let best = 0, bd = Infinity;
         centers.forEach((c, n) => { const d = cdist(data, i, c[0], c[1], c[2]); if (d < bd) { bd = d; best = n; } });
-        const a = acc[best]; a[0] += data[i]; a[1] += data[i + 1]; a[2] += data[i + 2]; a[3]++;
-      }
-      // Drop tiny clusters (stray bits of garment touching the edge).
-      centers = acc.filter((a) => a[3] > s.length * 0.06).map((a) => [a[0] / a[3], a[1] / a[3], a[2] / a[3]]);
+        const a = acc[best]; a[0] += data[i]; a[1] += data[i + 1]; a[2] += data[i + 2]; a[3]++; a[4][side[j]]++;
+      });
+      // Background surrounds the piece, so it shows up along at least three sides of the
+      // photo. A color on one or two sides is the garment running off the edge (pant legs
+      // past the bottom, sleeves past the sides), so it's not background.
+      const isBg = (a) => a[3] > s.length * 0.06 &&
+        (a[3] > s.length * 0.45 || a[4].filter((c, n) => c > perSide[n] * 0.15).length >= 3);
+      centers = acc.filter(isBg).map((a) => [a[0] / a[3], a[1] / a[3], a[2] / a[3]]);
       if (!centers.length) centers = [[data[0], data[1], data[2]]];
     }
     return centers;

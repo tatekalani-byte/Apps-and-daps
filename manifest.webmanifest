@@ -1,6 +1,6 @@
 {
-  "name": "Apps & Daps",
-  "short_name": "Apps & Daps",
+  "name": "My Closet",
+  "short_name": "My Closet",
   "description": "Snap your clothes, scroll your closet, style your outfits.",
   "start_url": "./",
   "scope": "./",

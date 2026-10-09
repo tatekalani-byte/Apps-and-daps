@@ -1,4 +1,4 @@
-# Apps & Daps ✦
+# My Closet ✦
 
 A mood-board style closet app. Snap pics of your clothes, scroll your closet like a Pinterest board, and collage outfits together.
 
@@ -9,7 +9,7 @@ A mood-board style closet app. Snap pics of your clothes, scroll your closet lik
 - **Cutouts**: the background is cut out automatically when you add a photo. It works best on a plain background that contrasts with the piece. **Touch up cutout** opens a cut tool: draw around an area, tap to remove a patch of color, or use erase/restore brushes. Pinch with two fingers to zoom in (up to 12×) and move around; one finger always edits, and the brush stays the same size on screen so it gets finer as you zoom.
 - **Measurements**: when you add a piece, enter one measurement (length for clothes, heel to toe for shoes, width for bags and extras), in inches or cm. Outfits use it to size pieces in true proportion, and a typical size fills in if you skip it.
 - **Jackets & layering**: a jacket keeps its full look (lining and back showing) in the closet. For layering, tap **Mark the inside for layering** and draw around the lining that shows through the open front (or use Auto-detect). That version is used only when the jacket is worn over a top, so the top shows through and its sleeves stay hidden.
-- **Style**: tap a piece to put it on and it snaps into place. Tops hang from the shoulders, bottoms start at the waist, shoes stand on the floor, jackets go over everything, and bags, hats and jewelry are set alongside. A new top swaps out the old one, and a dress replaces the top and bottoms. Tap a piece again to take it off. Drag to nudge a piece a few inches, use **Tuck in** for tops, and **Snap back** to reset. 🎲 **Shuffle** picks a random fit.
+- **Style**: tap a piece to put it on and it snaps into place. Tops hang from the shoulders, bottoms start at the waist, shoes stand on the floor, jackets go over everything, and bags, hats and jewelry are set alongside. A new top swaps out the old one, and a dress replaces the top and bottoms. Tap a piece again to take it off. Drag to nudge a piece a few inches, use **Tuck in** for tops, and **Snap back** to reset. If a piece comes out the wrong size, tap it and use **Smaller** or **Bigger**; that updates its saved measurement, so it stays fixed in every outfit. 🎲 **Shuffle** picks a random fit.
 - **Sample closet**: on an empty closet, **✨ Try a sample closet** loads 20 illustrated vintage pieces and 3 layered looks. Remove them anytime from the ⋯ menu.
 - **Looks**: your saved outfits, labeled with a vibe. Tap one to keep editing it.
 

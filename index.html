@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Apps &amp; Daps</title>
+  <title>My Closet</title>
   <meta name="description" content="Snap your clothes, scroll your closet, style your outfits.">
   <meta name="theme-color" content="#0b0b0e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Apps &amp; Daps">
+  <meta name="apple-mobile-web-app-title" content="My Closet">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -38,7 +38,7 @@
   </svg>
 
   <header class="masthead">
-    <p class="wordmark">Apps <em>&amp;</em> Daps</p>
+    <p class="wordmark">My <em>Closet</em></p>
     <button id="menu-btn" class="icon-btn" aria-label="Backup and settings"><svg class="ico"><use href="#i-more"/></svg></button>
   </header>
 
@@ -86,6 +86,8 @@
         </div>
         <div id="piece-tools" class="piece-tools" hidden>
           <button class="btn btn-ghost btn-sm" data-tool="tuck" id="tool-tuck">Tuck in</button>
+          <button class="btn btn-ghost btn-sm" data-tool="smaller" id="tool-smaller" aria-label="Make smaller">Smaller</button>
+          <button class="btn btn-ghost btn-sm" data-tool="bigger" id="tool-bigger" aria-label="Make bigger">Bigger</button>
           <button class="btn btn-ghost btn-sm" data-tool="reset" id="tool-reset">Snap back</button>
           <button class="btn btn-ghost btn-sm danger" data-tool="remove">Take off</button>
         </div>
@@ -335,7 +337,7 @@
   <div id="install" class="install" hidden role="dialog" aria-modal="true" aria-labelledby="install-title">
     <div class="install-card">
       <img class="install-icon" src="icons/icon-180.png" alt="" width="84" height="84">
-      <h1 id="install-title" class="install-title">Put Apps <em>&amp;</em> Daps on your home screen</h1>
+      <h1 id="install-title" class="install-title">Put My <em>Closet</em> on your home screen</h1>
       <p class="install-copy">It opens full screen like a regular app, works offline, and keeps your closet on your phone.</p>
       <ol id="install-steps" class="install-steps"></ol>
       <button type="button" class="btn btn-primary install-go" id="install-btn" hidden>Install app</button>

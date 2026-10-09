@@ -1,4 +1,4 @@
-/* Apps & Daps — snap your clothes, scroll your closet, style outfits.
+/* My Closet — snap your clothes, scroll your closet, style outfits.
    Everything is stored on-device in IndexedDB (photos included). */
 
 const CATEGORIES = ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes", "Bags", "Accessories", "Jewelry"];
@@ -212,7 +212,9 @@ function renderSizeField() {
   const info = SIZE_INFO[form.category];
   $("#f-size-label").textContent = info.label;
   $("#f-size").placeholder = fromInches(info.def);
-  $("#f-size-hint").textContent = `Lay it flat and measure, so it's sized right in outfits. Leave it blank to use a typical ${fromInches(info.def)} ${unit.v}.`;
+  $("#f-size-hint").textContent = form.original && !form.cut
+    ? "This photo isn't cut out yet, so the measurement would cover the whole photo and the piece would come out too small. Use Touch up cutout first."
+    : `Lay it flat and measure, so it's sized right in outfits. Leave it blank to use a typical ${fromInches(info.def)} ${unit.v}.`;
   document.querySelectorAll("#f-unit button").forEach((b) => b.setAttribute("aria-checked", b.dataset.unit === unit.v));
 }
 $("#f-unit").onclick = (e) => {
@@ -241,6 +243,7 @@ function setPreview(blob) {
   if (setPreview.url) URL.revokeObjectURL(setPreview.url);
   p.classList.toggle("is-cut", !!form.cut);
   updateCutActions();
+  renderSizeField();
   if (!blob) { p.innerHTML = "<span>No photo</span>"; return; }
   setPreview.url = URL.createObjectURL(blob);
   p.innerHTML = `<img src="${setPreview.url}" alt="preview">`;
@@ -687,7 +690,22 @@ $("#piece-tools").addEventListener("click", (e) => {
   if (tool === "tuck") { p.tuck = !p.tuck; refreshPositions(); renderTools(); }
   if (tool === "reset") { p.dx = p.dy = 0; refreshPositions(); renderTools(); applyClips(board, placed); }
   if (tool === "remove") { state.board.splice(state.selected, 1); state.selected = -1; renderBoard(); }
+  if (tool === "smaller" || tool === "bigger") resizePiece(itemById(p.itemId), tool === "bigger" ? 1 : -1);
 });
+
+// Smaller / Bigger: fix a piece that comes out the wrong size. It changes the piece's
+// saved measurement, so it stays fixed in every outfit.
+async function resizePiece(item, dir) {
+  if (!item) return;
+  const info = SIZE_INFO[item.category] ?? SIZE_INFO.Accessories;
+  const cur = item.size || info.def;
+  const next = Math.round(clamp(cur * (dir > 0 ? 1.06 : 1 / 1.06), 1, 70) * 4) / 4;
+  if (next === cur) return;
+  item.size = next;
+  renderBoard();
+  toast(`${info.label.split(" · ")[0]} now ${fromInches(next)} ${unit.v}`);
+  await idb.put("items", item);
+}
 
 // Hit-test against actual pixels, so you can grab a shirt through a jacket's cut-out front.
 const alphaMaps = new Map(); // itemId -> {w, h, a}
@@ -1514,7 +1532,7 @@ $("#import-file").onchange = async (e) => {
     renderOutfits();
     toast(`Restored ${data.items?.length ?? 0} pieces and ${data.outfits?.length ?? 0} looks`);
   } catch {
-    toast("That file doesn't look like an Apps & Daps backup");
+    toast("That file doesn't look like a My Closet backup");
   }
 };
 
@@ -1550,13 +1568,13 @@ function installSteps() {
           ? `Tap ${share} <strong>Share</strong>. On newer iPhones it's in the <strong>···</strong> menu next to the address bar.`
           : `Tap ${share} <strong>Share</strong> in the address bar`,
         `Scroll down and tap ${addSq} <strong>Add to Home Screen</strong>`,
-        "Tap <strong>Add</strong>, then open Apps & Daps from your home screen",
+        "Tap <strong>Add</strong>, then open My Closet from your home screen",
       ],
       note: "Add your clothes in the home screen app. iPhone keeps its closet separate from the browser's.",
     };
   }
   if (android) return {
-    steps: [`Tap ${kebab} in the top corner of the browser`, "Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>", "Open Apps & Daps from your home screen"],
+    steps: [`Tap ${kebab} in the top corner of the browser`, "Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>", "Open My Closet from your home screen"],
     note: "",
   };
   return {
