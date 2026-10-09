@@ -863,13 +863,13 @@
         </div>
         <p class="section-label">Your data</p>
         <div class="calc-card">
-          <p class="calc-hint data-hint">Everything is saved on this device only. To move it to another copy of Ascent, like the home screen app, copy it here and paste it there.</p>
+          <p class="calc-hint data-hint">Everything is saved on this device only. To move it to another copy of Ascent, like the home screen app, copy it here and paste it there. A plan from Claude goes in Paste data too; it adds to what you have instead of replacing it.</p>
           <div class="calc-goal-row data-row">
             <button type="button" class="calc-goal-btn" id="dataCopy">Copy my data</button>
             <button type="button" class="calc-goal-btn" id="dataPasteOpen">Paste data</button>
           </div>
           <textarea id="dataBox" class="data-box" rows="5" spellcheck="false" autocomplete="off" aria-label="Ascent data" hidden></textarea>
-          <button type="button" class="calc-btn" id="dataImport" hidden>Add or replace</button>
+          <button type="button" class="calc-btn" id="dataImport" hidden>Replace my data with this</button>
           <p class="calc-hint data-msg" id="dataMsg" role="status"></p>
         </div>
       </section>
@@ -3208,12 +3208,18 @@
     dataBox.hidden = false;
     dataBox.value = "";
     dataImportBtn.hidden = false;
-    dataImportBtn.textContent = "Add or replace";
+    dataImportBtn.textContent = "Replace my data with this";
     importArmed = false;
-    dataMsg.textContent = "Paste data you copied from another copy of Ascent, or a plan Claude made for you, then tap the button.";
+    dataMsg.textContent = "Paste the data or plan you copied, then tap the button.";
     dataBox.focus();
   });
-  dataBox.addEventListener("input", function(){ importArmed = false; dataImportBtn.textContent = "Add or replace"; });
+  function isPlanText(t){ return /^\s*ASCENTADD1:/.test(t); }
+  dataBox.addEventListener("input", function(){
+    importArmed = false;
+    var plan = isPlanText(dataBox.value);
+    dataImportBtn.textContent = plan ? "Add this plan" : "Replace my data with this";
+    dataMsg.textContent = plan ? "This adds goals, habits and plans. Nothing you already have is changed." : "Paste the data or plan you copied, then tap the button.";
+  });
   // A plan ("ASCENTADD1:{...}") adds goals, habits and appointments to what's already here.
   function readPlan(text){
     var m = /^ASCENTADD1:\s*([\s\S]+)$/.exec(text);

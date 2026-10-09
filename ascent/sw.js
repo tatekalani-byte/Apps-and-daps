@@ -1,5 +1,5 @@
 // Offline cache for Ascent. Bump VERSION when shipping changes.
-const VERSION = "ascent-v2";
+const VERSION = "ascent-v3";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
