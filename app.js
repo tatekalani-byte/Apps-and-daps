@@ -914,7 +914,7 @@ document.querySelectorAll("dialog").forEach((d) => {
    - "bg": the main cutout (background removed), shown everywhere.
    - "inside": for jackets, what to hide when layering over a top. It starts from the
      main cutout and can only remove more; the main cutout is never changed by it. */
-const ed = { mode: "bg", pix: null, mask: null, base: null, undo: [], tool: "lasso", pts: [], out: null, tol: 30, size: 28, painting: false, drawing: false, last: null };
+const ed = { mode: "bg", pix: null, mask: null, base: null, undo: [], tool: "lasso", pts: [], out: null, tol: 30, size: 28, painting: false, drawing: false, last: null, tap: null, cursor: null };
 const cutCanvas = $("#cut-canvas");
 const hint = (t) => { $("#cut-hint").textContent = t; };
 const HINTS = {
@@ -954,7 +954,9 @@ async function openEditor(mode = "bg") {
   ed.out = new ImageData(ed.pix.W, ed.pix.H);
   cutCanvas.width = ed.pix.W;
   cutCanvas.height = ed.pix.H;
+  ed.cursor = null;
   setTool("lasso");
+  fitView();
   draw();
 }
 
@@ -993,8 +995,15 @@ function draw() {
   }
   const ctx = cutCanvas.getContext("2d");
   ctx.putImageData(ed.out, 0, 0);
+  const k = W / cutCanvas.getBoundingClientRect().width;
+  if (ed.cursor) {
+    // brush ring, so you can see exactly what a stroke will touch
+    const [cx, cy, r] = ed.cursor;
+    ctx.lineWidth = 1.5 * k;
+    ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.beginPath(); ctx.arc(cx, cy, r + k, 0, 7); ctx.stroke();
+    ctx.strokeStyle = "#ededef"; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+  }
   if (ed.pts.length > 1) {
-    const k = W / cutCanvas.getBoundingClientRect().width;
     ctx.strokeStyle = "#ededef"; ctx.fillStyle = "rgba(217,187,143,.25)"; ctx.lineWidth = 2 * k;
     ctx.lineJoin = ctx.lineCap = "round";
     ctx.beginPath();
@@ -1023,16 +1032,80 @@ function paintTo(x, y, k) {
   redraw();
 }
 
-cutCanvas.addEventListener("pointerdown", (e) => {
+/* Zoom and pan: two fingers pinch and drag the view, one finger always edits.
+   The canvas is laid out at "fit" size; the view transform (translate + scale) zooms it.
+   canvasPoint() reads the transformed box, so editing works at any zoom, and the brush
+   keeps its on-screen size (finer strokes when zoomed in). */
+const stage = $("#cut-stage");
+const view = $("#cut-view");
+const zv = { z: 1, x: 0, y: 0, fitW: 0, fitH: 0 }; // zoom, translate (stage px), fitted canvas size
+const MAX_ZOOM = 12;
+
+function fitView() {
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const s = Math.min(sw / ed.pix.W, sh / ed.pix.H);
+  zv.fitW = ed.pix.W * s;
+  zv.fitH = ed.pix.H * s;
+  cutCanvas.style.width = zv.fitW + "px";
+  cutCanvas.style.height = zv.fitH + "px";
+  zv.z = 1;
+  zv.x = (sw - zv.fitW) / 2;
+  zv.y = (sh - zv.fitH) / 2;
+  applyView();
+}
+// Keep the picture on screen: centered while it's smaller than the stage, edge-to-edge once bigger.
+function clampView() {
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const w = zv.fitW * zv.z, h = zv.fitH * zv.z;
+  zv.x = w <= sw ? (sw - w) / 2 : Math.min(0, Math.max(sw - w, zv.x));
+  zv.y = h <= sh ? (sh - h) / 2 : Math.min(0, Math.max(sh - h, zv.y));
+}
+function applyView() {
+  clampView();
+  view.style.transform = `translate(${zv.x}px, ${zv.y}px) scale(${zv.z})`;
+  // show real pixels when zoomed in close, so edges are easy to see
+  cutCanvas.style.imageRendering = zv.z * (zv.fitW / ed.pix.W) >= 2.5 ? "pixelated" : "auto";
+  $("#zoom-level").textContent = `${Math.round(zv.z * 100)}%`;
+}
+// Zoom to `z`, keeping the point (sx, sy) in stage coordinates fixed under the finger or cursor.
+function zoomAt(z, sx, sy) {
+  z = Math.min(MAX_ZOOM, Math.max(1, z));
+  const px = (sx - zv.x) / zv.z, py = (sy - zv.y) / zv.z;
+  zv.z = z;
+  zv.x = sx - px * z;
+  zv.y = sy - py * z;
+  applyView();
+}
+const stagePoint = (cx, cy) => { const r = stage.getBoundingClientRect(); return [cx - r.left, cy - r.top]; };
+
+$("#zoom-in").onclick = () => zoomAt(zv.z * 1.6, stage.clientWidth / 2, stage.clientHeight / 2);
+$("#zoom-out").onclick = () => zoomAt(zv.z / 1.6, stage.clientWidth / 2, stage.clientHeight / 2);
+$("#zoom-fit").onclick = () => fitView();
+stage.addEventListener("wheel", (e) => {
   if (!ed.pix) return;
+  e.preventDefault();
+  const [sx, sy] = stagePoint(e.clientX, e.clientY);
+  zoomAt(zv.z * Math.exp(-e.deltaY * 0.0025), sx, sy);
+}, { passive: false });
+// iOS Safari: stop the page itself from pinch-zooming while working in the editor
+for (const t of ["gesturestart", "gesturechange"]) stage.addEventListener(t, (e) => e.preventDefault());
+
+const touches = new Map(); // pointerId -> [clientX, clientY]
+let gesture = null;        // { d, mx, my, z, x, y } at the start of a pinch
+let editing = false;       // a one-finger edit is in progress
+let waitAllUp = false;     // after a pinch, ignore the leftover finger until all are lifted
+
+function pinchInfo() {
+  const [a, b] = [...touches.values()];
+  const [ax, ay] = stagePoint(a[0], a[1]), [bx, by] = stagePoint(b[0], b[1]);
+  return { d: Math.max(1, Math.hypot(bx - ax, by - ay)), mx: (ax + bx) / 2, my: (ay + by) / 2 };
+}
+
+function editStart(e) {
   const [x, y, k] = canvasPoint(e);
-  cutCanvas.setPointerCapture(e.pointerId);
+  editing = true;
   if (ed.tool === "wand") {
-    pushUndo();
-    const n = Cutout.wand(ed.pix, ed.mask, x, y, ed.tol);
-    if (!n) { ed.undo.pop(); hint("That spot is already removed."); }
-    else hint("Removed. Tap more, or raise Strength if it missed some.");
-    redraw();
+    ed.tap = { x, y, cx: e.clientX, cy: e.clientY }; // applied on lift, so a pinch can't trigger it
   } else if (ed.tool === "lasso") {
     ed.drawing = true;
     ed.pts = [[x, y]];
@@ -1042,15 +1115,40 @@ cutCanvas.addEventListener("pointerdown", (e) => {
     ed.last = null;
     paintTo(x, y, k);
   }
-});
-cutCanvas.addEventListener("pointermove", (e) => {
-  if (!ed.painting && !ed.drawing) return;
+}
+function editMove(e) {
   const [x, y, k] = canvasPoint(e);
+  if (ed.tool === "erase" || ed.tool === "restore") ed.cursor = [x, y, (ed.size * k) / 2];
   if (ed.painting) { paintTo(x, y, k); return; }
-  const [lx, ly] = ed.pts[ed.pts.length - 1];
-  if (Math.hypot(x - lx, y - ly) > 3 * k) { ed.pts.push([x, y]); redraw(); }
-});
-const stopPointer = () => {
+  if (ed.drawing) {
+    const [lx, ly] = ed.pts[ed.pts.length - 1];
+    if (Math.hypot(x - lx, y - ly) > 3 * k) { ed.pts.push([x, y]); redraw(); }
+  }
+}
+// A second finger arrived: take back whatever the first finger started.
+function editCancel() {
+  if (ed.painting) { const m = ed.undo.pop(); if (m) ed.mask.set(m); }
+  ed.painting = ed.drawing = false;
+  ed.pts = [];
+  ed.tap = null;
+  ed.last = null;
+  editing = false;
+  redraw();
+}
+function editEnd(e) {
+  editing = false;
+  if (ed.tap) {
+    const t = ed.tap;
+    ed.tap = null;
+    if (Math.hypot(e.clientX - t.cx, e.clientY - t.cy) < 12) {
+      pushUndo();
+      const n = Cutout.wand(ed.pix, ed.mask, t.x, t.y, ed.tol);
+      if (!n) { ed.undo.pop(); hint("That spot is already removed."); }
+      else hint("Removed. Tap more, or raise Strength if it missed some.");
+      redraw();
+    }
+    return;
+  }
   if (ed.drawing) {
     ed.drawing = false;
     if (ed.pts.length > 4) {
@@ -1063,9 +1161,54 @@ const stopPointer = () => {
   }
   ed.painting = false;
   ed.last = null;
+}
+
+stage.addEventListener("pointerdown", (e) => {
+  if (!ed.pix || e.target.closest(".zoom-controls")) return;
+  stage.setPointerCapture(e.pointerId);
+  touches.set(e.pointerId, [e.clientX, e.clientY]);
+  if (touches.size === 1 && !waitAllUp) editStart(e);
+  else if (touches.size === 2) {
+    if (editing) editCancel();
+    const p = pinchInfo();
+    gesture = { ...p, z: zv.z, x: zv.x, y: zv.y };
+    ed.cursor = null;
+    waitAllUp = true;
+  }
+});
+stage.addEventListener("pointermove", (e) => {
+  if (!ed.pix) return;
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+  if (gesture && touches.size >= 2) {
+    const p = pinchInfo();
+    const z = Math.min(MAX_ZOOM, Math.max(1, gesture.z * (p.d / gesture.d)));
+    // the picture point that was under the fingers stays under them, so pinch also pans
+    const px = (gesture.mx - gesture.x) / gesture.z, py = (gesture.my - gesture.y) / gesture.z;
+    zv.z = z;
+    zv.x = p.mx - px * z;
+    zv.y = p.my - py * z;
+    applyView();
+    return;
+  }
+  if (editing) editMove(e);
+  else if (!touches.size && e.pointerType === "mouse" && (ed.tool === "erase" || ed.tool === "restore")) {
+    const [x, y, k] = canvasPoint(e);
+    ed.cursor = [x, y, (ed.size * k) / 2];
+    redraw();
+  }
+});
+const pointerUp = (e) => {
+  if (!touches.delete(e.pointerId)) return;
+  if (editing && !waitAllUp) editEnd(e);
+  if (touches.size < 2) gesture = null;
+  if (!touches.size) {
+    waitAllUp = false;
+    if (e.pointerType !== "mouse") { ed.cursor = null; redraw(); }
+  }
 };
-cutCanvas.addEventListener("pointerup", stopPointer);
-cutCanvas.addEventListener("pointercancel", stopPointer);
+stage.addEventListener("pointerup", pointerUp);
+stage.addEventListener("pointercancel", pointerUp);
+stage.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && !touches.size) { ed.cursor = null; redraw(); } });
 
 $("#cut-auto").onclick = () => {
   pushUndo();

@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION when shipping changes.
-const VERSION = "v9";
+const VERSION = "v10";
 const SHELL = ["./", "index.html", "styles.css", "cutout.js", "samples.js", "outfit-photo.js", "app.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

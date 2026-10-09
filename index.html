@@ -238,7 +238,16 @@
         <h2 class="sheet-title" id="cut-title">Touch up</h2>
         <button class="btn btn-primary btn-sm" id="cut-done">Done</button>
       </div>
-      <div class="cut-stage"><canvas id="cut-canvas"></canvas></div>
+      <div class="cut-stage" id="cut-stage">
+        <div class="cut-view" id="cut-view"><canvas id="cut-canvas"></canvas></div>
+        <div class="zoom-controls">
+          <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+          <span id="zoom-level" class="zoom-level">100%</span>
+          <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" id="zoom-fit" class="zoom-fit">Fit</button>
+        </div>
+      </div>
+      <p class="zoom-tip">Pinch with two fingers to zoom in and move around. One finger edits.</p>
       <p id="cut-hint" class="cut-hint"></p>
       <div id="cut-tools" class="segmented" role="radiogroup" aria-label="Tool">
         <button type="button" role="radio" data-tool="lasso">Draw</button>
